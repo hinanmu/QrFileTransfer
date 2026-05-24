@@ -981,6 +981,7 @@ input[type="file"] { display: none; }
           <button class="btn btn-icon" id="next-btn" disabled>›</button>
           <button class="btn btn-sm" id="play-btn" disabled>▶ 播放</button>
         </div>
+        <input type="range" id="qr-scrollbar" min="0" max="0" value="0" style="width:100%;margin-top:16px;accent-color:var(--cyan);height:6px;cursor:pointer;">
       </div>
     </div>
   </section>
@@ -1171,6 +1172,8 @@ const nextBtn = $('next-btn');
 const playBtn = $('play-btn');
 const progressText = $('progress-text');
 const progressFill = $('progress-fill');
+const progressBar = document.querySelector('.carousel-controls .progress-bar');
+const qrScrollbar = $('qr-scrollbar');
 const speedSlider = $('speed-slider');
 const speedDisplay = $('speed-display');
 const startCameraBtn = $('start-camera-btn');
@@ -1733,6 +1736,8 @@ function showQRCode(index) {
   }
   progressText.textContent = `${index + 1} / ${qrCodeData.length}`;
   progressFill.style.width = `${((index + 1) / qrCodeData.length) * 100}%`;
+  qrScrollbar.max = qrCodeData.length - 1;
+  qrScrollbar.value = index;
 
   // 后台预取后续几帧
   prefetchNext(index);
@@ -1744,6 +1749,8 @@ function updateCarouselControls() {
   nextBtn.disabled = !hasQR || currentIndex >= qrCodeData.length - 1;
   playBtn.disabled = !hasQR;
   playBtn.textContent = isPlaying ? '⏸ 暂停' : '▶ 播放';
+  qrScrollbar.max = Math.max(0, qrCodeData.length - 1);
+  qrScrollbar.value = currentIndex;
 }
 
 prevBtn.addEventListener('click', () => {
@@ -1781,6 +1788,14 @@ document.addEventListener('mousemove', e => {
 });
 document.addEventListener('mouseup', () => {
   isDraggingProgress = false;
+});
+
+qrScrollbar.addEventListener('input', () => {
+  if (!qrCodeData.length) return;
+  const idx = parseInt(qrScrollbar.value);
+  currentIndex = idx;
+  showQRCode(currentIndex);
+  updateCarouselControls();
 });
 
 function startPlayback() {
