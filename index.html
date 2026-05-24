@@ -1992,33 +1992,39 @@ function updateImageGallery() {
 function decodeImageFile(file) {
   return new Promise((resolve) => {
     const img = new Image();
+    let resolved = false;
+    const timer = setTimeout(() => { if (!resolved) { resolved = true; resolve(null); } }, 10000);
     img.onload = () => {
-      const canvas = document.createElement('canvas');
-      const maxDim = 1200;
-      let w = img.naturalWidth;
-      let h = img.naturalHeight;
-      if (w > maxDim || h > maxDim) {
-        const ratio = Math.min(maxDim / w, maxDim / h);
-        w = Math.round(w * ratio);
-        h = Math.round(h * ratio);
+      try {
+        const canvas = document.createElement('canvas');
+        const maxDim = 1200;
+        let w = img.naturalWidth;
+        let h = img.naturalHeight;
+        if (w > maxDim || h > maxDim) {
+          const ratio = Math.min(maxDim / w, maxDim / h);
+          w = Math.round(w * ratio);
+          h = Math.round(h * ratio);
+        }
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        URL.revokeObjectURL(img.src);
+        const reader = new ZXing.BrowserQRCodeReader();
+        reader.decodeFromCanvas(canvas).then(result => {
+          reader.reset();
+          if (!resolved) { resolved = true; clearTimeout(timer); resolve(result.getText()); }
+        }).catch(() => {
+          reader.reset();
+          if (!resolved) { resolved = true; clearTimeout(timer); resolve(null); }
+        });
+      } catch (e) {
+        if (!resolved) { resolved = true; clearTimeout(timer); resolve(null); }
       }
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, w, h);
-      URL.revokeObjectURL(img.src);
-      const reader = new ZXing.BrowserQRCodeReader();
-      reader.decodeFromCanvas(canvas).then(result => {
-        reader.reset();
-        resolve(result.getText());
-      }).catch(() => {
-        reader.reset();
-        resolve(null);
-      });
     };
     img.onerror = () => {
       URL.revokeObjectURL(img.src);
-      resolve(null);
+      if (!resolved) { resolved = true; clearTimeout(timer); resolve(null); }
     };
     img.src = URL.createObjectURL(file);
   });
@@ -2311,7 +2317,7 @@ function reconstructFiles() {
         addScanLog('错误', `文件 ${file.path} 缺少分片 ${i}`, 'end');
       }
     }
-    if (hasAll && allChunks.length) {
+    if (hasAll) {
       const blob = new Blob(allChunks, { type: 'application/octet-stream' });
       const url = URL.createObjectURL(blob);
       reconstructed++;
@@ -2333,9 +2339,9 @@ function addDownloadItem(path, url, size) {
   const div = document.createElement('div');
   div.className = 'download-item';
   div.innerHTML = `
-    <span class="name">${path}</span>
+    <span class="name">${escapeHtml(path)}</span>
     <span style="color:var(--text-dim);font-size:11px;margin:0 12px;">${formatSize(size)}</span>
-    <a class="dlink" href="${url}" download="${name}">下载</a>
+    <a class="dlink" href="${url}" download="${escapeHtml(name)}">下载</a>
   `;
   downloadList.appendChild(div);
 }
