@@ -1243,6 +1243,7 @@ function handleFiles(fileList, isFolder) {
       parts.shift();
       relPath = parts.join('/') || file.name;
     }
+    if (isFolder && isGitIgnored(relPath)) continue;
     fileEntries.push({ file, path: relPath });
   }
 
@@ -1250,6 +1251,40 @@ function handleFiles(fileList, isFolder) {
   renderFileList();
   updateStats();
   encodeBtn.disabled = false;
+}
+
+const GIT_IGNORE_PATTERNS = [
+  '.DS_Store',
+  'node_modules/**',
+  '.trae/**',
+  '*.log',
+  '.git/**'
+];
+
+function isGitIgnored(relPath) {
+  for (const pattern of GIT_IGNORE_PATTERNS) {
+    if (matchGitPattern(relPath, pattern)) return true;
+  }
+  return false;
+}
+
+function matchGitPattern(path, pattern) {
+  let p = pattern;
+  if (p.startsWith('/')) p = p.slice(1);
+  if (p.endsWith('/')) p += '**';
+
+  const regexStr = '^' + p
+    .replace(/\./g, '\\.')
+    .replace(/\*\*/g, '___DOUBLESTAR___')
+    .replace(/\*/g, '[^/]*')
+    .replace(/___DOUBLESTAR___/g, '.*')
+    .replace(/\?/g, '.');
+
+  try {
+    return new RegExp(regexStr).test(path);
+  } catch {
+    return false;
+  }
 }
 
 function renderFileList() {
