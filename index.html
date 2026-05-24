@@ -978,78 +978,109 @@ input[type="file"] { display: none; }
   <!-- ==================== RECEIVER SECTION ==================== -->
   <section id="receiver-section" class="section">
     <div class="receiver-layout">
-      <!-- Left: Camera -->
-      <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-          <div class="card-title" style="margin-bottom:0;">摄像头扫描</div>
-          <div style="display:flex;gap:8px;">
-            <button class="btn btn-sm btn-purple" id="start-camera-btn">▶ 启动摄像头</button>
-            <button class="btn btn-sm" id="stop-camera-btn" disabled>■ 停止</button>
-          </div>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;padding:8px 12px;background:var(--bg-secondary);border-radius:6px;border:1px solid var(--gray);">
-          <span style="font-family:var(--font-mono);font-size:11px;color:var(--text-dim);">🔐 解密</span>
-          <input type="password" id="receiver-password" placeholder="与发送端密码一致" style="flex:1;background:var(--bg-secondary);border:1px solid var(--gray);border-radius:4px;padding:6px 10px;color:var(--text);font-family:var(--font-mono);font-size:12px;outline:none;transition:border-color 0.2s;"
-            onfocus="this.style.borderColor='var(--purple)'" onblur="this.style.borderColor='var(--gray)'">
-          <button class="btn btn-icon" type="button" style="width:30px;height:30px;font-size:14px;padding:0;" onclick="const ip=document.getElementById('receiver-password');ip.type=ip.type==='password'?'text':'password';this.textContent=ip.type==='password'?'👁':'👁‍🗨'">👁</button>
-        </div>
-
-        <div class="camera-view" id="camera-view">
-          <video id="camera-video" autoplay playsinline muted></video>
-          <div class="camera-corner tl"></div>
-          <div class="camera-corner tr"></div>
-          <div class="camera-corner bl"></div>
-          <div class="camera-corner br"></div>
-          <div class="camera-scanline" id="scanline" style="display:none;"></div>
-          <div class="camera-overlay" id="camera-overlay">
-            <div class="icon">📷</div>
-            <div class="text">点击"启动摄像头"开始扫描</div>
-          </div>
-          <div class="decode-flash" id="decode-flash"></div>
-        </div>
-
-        <div class="receiver-progress" id="receiver-progress" style="display:none;">
-          <div class="progress-ring-container">
-            <div class="progress-ring">
-              <svg width="80" height="80" viewBox="0 0 80 80">
-                <circle class="bg" cx="40" cy="40" r="34"/>
-                <circle class="fg" id="progress-ring-fg" cx="40" cy="40" r="34"
-                  stroke-dasharray="213.6" stroke-dashoffset="213.6"/>
-              </svg>
-              <div class="center" id="progress-percent">0%</div>
+      <!-- Left Column -->
+      <div style="display:flex;flex-direction:column;gap:24px;min-width:0;">
+        <!-- Left: Camera -->
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <div class="card-title" style="margin-bottom:0;">摄像头扫描</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button class="btn btn-sm btn-purple" id="start-camera-btn">▶ 启动摄像头</button>
+              <button class="btn btn-sm" id="stop-camera-btn" disabled>■ 停止</button>
+              <button class="btn btn-sm" id="restart-receiver-btn" disabled style="border-color:var(--pink);color:var(--pink);">↺ 重新开始</button>
             </div>
           </div>
-          <div class="receiver-stats">
-            <div><span class="stat-label">已接收:</span> <span class="stat-val" id="rcv-chunks">0</span></div>
-            <div><span class="stat-label">总片数:</span> <span class="stat-val" id="rcv-total">0</span></div>
-            <div><span class="stat-label">文件数:</span> <span class="stat-val" id="rcv-files">0</span></div>
-            <div><span class="stat-label">状态:</span> <span class="stat-val" id="rcv-status">等待中</span></div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;padding:8px 12px;background:var(--bg-secondary);border-radius:6px;border:1px solid var(--gray);">
+            <span style="font-family:var(--font-mono);font-size:11px;color:var(--text-dim);">🔐 解密</span>
+            <input type="password" id="receiver-password" placeholder="与发送端密码一致" style="flex:1;background:var(--bg-secondary);border:1px solid var(--gray);border-radius:4px;padding:6px 10px;color:var(--text);font-family:var(--font-mono);font-size:12px;outline:none;transition:border-color 0.2s;"
+              onfocus="this.style.borderColor='var(--purple)'" onblur="this.style.borderColor='var(--gray)'">
+            <button class="btn btn-icon" type="button" style="width:30px;height:30px;font-size:14px;padding:0;" onclick="const ip=document.getElementById('receiver-password');ip.type=ip.type==='password'?'text':'password';this.textContent=ip.type==='password'?'👁':'👁‍🗨'">👁</button>
+          </div>
+
+          <div class="camera-view" id="camera-view">
+            <video id="camera-video" autoplay playsinline muted></video>
+            <div class="camera-corner tl"></div>
+            <div class="camera-corner tr"></div>
+            <div class="camera-corner bl"></div>
+            <div class="camera-corner br"></div>
+            <div class="camera-scanline" id="scanline" style="display:none;"></div>
+            <div class="camera-overlay" id="camera-overlay">
+              <div class="icon">📷</div>
+              <div class="text">点击"启动摄像头"开始扫描</div>
+            </div>
+            <div class="decode-flash" id="decode-flash"></div>
+          </div>
+
+          <div class="receiver-progress" id="receiver-progress" style="display:none;">
+            <div class="progress-ring-container">
+              <div class="progress-ring">
+                <svg width="80" height="80" viewBox="0 0 80 80">
+                  <circle class="bg" cx="40" cy="40" r="34"/>
+                  <circle class="fg" id="progress-ring-fg" cx="40" cy="40" r="34"
+                    stroke-dasharray="213.6" stroke-dashoffset="213.6"/>
+                </svg>
+                <div class="center" id="progress-percent">0%</div>
+              </div>
+            </div>
+            <div class="receiver-stats">
+              <div><span class="stat-label">已接收:</span> <span class="stat-val" id="rcv-chunks">0</span></div>
+              <div><span class="stat-label">总片数:</span> <span class="stat-val" id="rcv-total">0</span></div>
+              <div><span class="stat-label">文件数:</span> <span class="stat-val" id="rcv-files">0</span></div>
+              <div><span class="stat-label">状态:</span> <span class="stat-val" id="rcv-status">等待中</span></div>
+            </div>
+          </div>
+
+          <div id="download-area" class="download-area" style="display:none;">
+            <div class="title">✓ 传输完成 - 点击下载</div>
+            <div class="download-list" id="download-list"></div>
           </div>
         </div>
 
-        <div id="download-area" class="download-area" style="display:none;">
-          <div class="title">✓ 传输完成 - 点击下载</div>
-          <div class="download-list" id="download-list"></div>
-        </div>
-      </div>
+        <!-- Left: Image Upload -->
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <div class="card-title" style="margin-bottom:0;">📷 图片识别</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <input type="file" id="qr-image-input" accept="image/*" multiple hidden>
+              <button class="btn btn-sm" id="select-qr-images-btn">📁 选择二维码图片</button>
+              <button class="btn btn-sm btn-purple" id="batch-decode-btn" disabled>▶ 批量识别</button>
+            </div>
+          </div>
 
-      <!-- Right: Scan Log -->
-      <div class="card" style="flex-shrink:0;">
-        <div class="card-title">📋 扫描日志</div>
-        <div class="scan-log" id="scan-log">
-          <div class="file-empty">
-            <div class="icon">📋</div>
-            <div>等待扫描开始...</div>
+          <div id="image-preview-area" style="display:flex;gap:8px;flex-wrap:wrap;min-height:60px;padding:8px;background:var(--bg-secondary);border-radius:8px;border:1px dashed var(--gray-light);margin-bottom:8px;">
+            <div style="width:100%;text-align:center;color:var(--text-dim);font-family:var(--font-mono);font-size:12px;padding:16px 0;">
+              选择保存到本地的二维码截图，批量解码
+            </div>
+          </div>
+
+          <div id="batch-progress" style="display:none;align-items:center;gap:12px;font-family:var(--font-mono);font-size:12px;color:var(--text-dim);">
+            <div style="flex:1;height:4px;background:var(--gray);border-radius:2px;overflow:hidden;">
+              <div id="batch-progress-fill" style="height:100%;width:0%;background:linear-gradient(90deg,var(--purple),var(--pink));border-radius:2px;transition:width 0.3s;"></div>
+            </div>
+            <span id="batch-progress-text">0/0</span>
           </div>
         </div>
       </div>
-      <div class="card" style="flex:1;min-width:0;">
-        <div class="card-title">⏳ 缺失分片</div>
-        <div id="missing-chunks-container" style="display:none;">
-          <div id="missing-chunks-list" style="display:flex;flex-wrap:wrap;gap:4px;max-height:240px;overflow-y:auto;padding:4px;"></div>
+
+      <!-- Right Column -->
+      <div style="display:flex;flex-direction:column;gap:24px;min-width:0;">
+        <div class="card">
+          <div class="card-title">📋 扫描日志</div>
+          <div class="scan-log" id="scan-log">
+            <div class="file-empty">
+              <div class="icon">📋</div>
+              <div>等待扫描开始...</div>
+            </div>
+          </div>
         </div>
-        <div id="missing-none" style="color:var(--cyan);font-family:var(--font-mono);font-size:13px;padding:8px 12px;">
-          暂无缺失分片！
+        <div class="card" style="flex:1;">
+          <div class="card-title">⏳ 缺失分片</div>
+          <div id="missing-chunks-container" style="display:none;">
+            <div id="missing-chunks-list" style="display:flex;flex-wrap:wrap;gap:4px;max-height:240px;overflow-y:auto;padding:4px;"></div>
+          </div>
+          <div id="missing-none" style="color:var(--cyan);font-family:var(--font-mono);font-size:13px;padding:8px 12px;">
+            暂无缺失分片！
+          </div>
         </div>
       </div>
     </div>
@@ -1087,10 +1118,16 @@ let prefetchTimer = null;
 let mediaStream = null;
 let isScanning = false;
 let scanInterval = null;
+let scanCounter = 0;
+let scanStartTime = null;
 let receivedChunks = new Map(); // "fileIdx-chunkIdx" -> Uint8Array
 let receivedMeta = null; // parsed metadata
 let receivedFiles = new Map(); // fileIndex -> { path, size, totalChunks, data: [] }
 let totalExpectedChunks = 0;
+
+// Image batch decode state
+let imageFiles = [];
+let isBatchDecoding = false;
 
 // ---- DOM refs ----
 const $ = id => document.getElementById(id);
@@ -1117,6 +1154,7 @@ const speedSlider = $('speed-slider');
 const speedDisplay = $('speed-display');
 const startCameraBtn = $('start-camera-btn');
 const stopCameraBtn = $('stop-camera-btn');
+const restartReceiverBtn = $('restart-receiver-btn');
 const cameraVideo = $('camera-video');
 const cameraOverlay = $('camera-overlay');
 const scanline = $('scanline');
@@ -1132,6 +1170,13 @@ const rcvFiles = $('rcv-files');
 const rcvStatus = $('rcv-status');
 const downloadArea = $('download-area');
 const downloadList = $('download-list');
+const qrImageInput = $('qr-image-input');
+const selectQrImagesBtn = $('select-qr-images-btn');
+const batchDecodeBtn = $('batch-decode-btn');
+const imagePreviewArea = $('image-preview-area');
+const batchProgress = $('batch-progress');
+const batchProgressFill = $('batch-progress-fill');
+const batchProgressText = $('batch-progress-text');
 
 const circumference = 2 * Math.PI * 34;
 
@@ -1684,8 +1729,11 @@ async function startCamera() {
     scanline.style.display = 'block';
     startCameraBtn.disabled = true;
     stopCameraBtn.disabled = false;
+    restartReceiverBtn.disabled = false;
+    scanCounter = 0;
+    scanStartTime = Date.now();
     clearScanLog();
-    addScanLog('系统', '摄像头已启动，等待扫描...', 'meta');
+    addScanLog('系统', `摄像头已启动 ${cameraVideo.videoWidth}×${cameraVideo.videoHeight}，对准发送端屏幕开始扫描`, 'meta');
     resetReceiverState();
     startScanning();
   } catch (err) {
@@ -1705,6 +1753,134 @@ function stopCamera() {
   scanline.style.display = 'none';
   startCameraBtn.disabled = false;
   stopCameraBtn.disabled = true;
+  restartReceiverBtn.disabled = true;
+}
+
+restartReceiverBtn.addEventListener('click', restartReceiver);
+
+function restartReceiver() {
+  receivedChunks = new Map();
+  receivedMeta = null;
+  receivedFiles = new Map();
+  totalExpectedChunks = 0;
+  scanCounter = 0;
+  scanStartTime = mediaStream ? Date.now() : null;
+  resetReceiverState();
+  clearScanLog();
+
+  if (mediaStream) {
+    addScanLog('系统', '已重置，重新开始扫描...', 'meta');
+    stopScanning();
+    startScanning();
+  } else {
+    addScanLog('系统', '已重置，点击"启动摄像头"开始接收', 'meta');
+    restartReceiverBtn.disabled = true;
+  }
+}
+
+// ============================================================
+// IMAGE BATCH DECODE
+// ============================================================
+
+selectQrImagesBtn.addEventListener('click', () => qrImageInput.click());
+
+qrImageInput.addEventListener('change', e => {
+  imageFiles = Array.from(e.target.files || []);
+  batchDecodeBtn.disabled = imageFiles.length === 0 || isBatchDecoding;
+  renderImagePreviews();
+  if (imageFiles.length > 0) {
+    addScanLog('系统', `选择了 ${imageFiles.length} 张二维码图片`, 'meta');
+  }
+});
+
+function renderImagePreviews() {
+  if (imageFiles.length === 0) {
+    imagePreviewArea.innerHTML = `<div style="width:100%;text-align:center;color:var(--text-dim);font-family:var(--font-mono);font-size:12px;padding:16px 0;">
+      选择保存到本地的二维码截图，批量解码
+    </div>`;
+    return;
+  }
+  imagePreviewArea.innerHTML = imageFiles.map((f, i) =>
+    `<div style="position:relative;width:80px;height:80px;border-radius:6px;overflow:hidden;border:1px solid var(--gray);flex-shrink:0;" title="${f.name}">
+      <img src="${URL.createObjectURL(f)}" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.style.display='none'">
+      <span style="position:absolute;bottom:0;right:0;background:rgba(0,0,0,0.6);color:#fff;font-size:10px;padding:1px 4px;border-radius:3px 0 0 0;font-family:var(--font-mono);">${i+1}</span>
+    </div>`
+  ).join('');
+}
+
+batchDecodeBtn.addEventListener('click', startBatchDecode);
+
+async function startBatchDecode() {
+  if (isBatchDecoding || imageFiles.length === 0) return;
+  isBatchDecoding = true;
+  batchDecodeBtn.disabled = true;
+  batchDecodeBtn.textContent = '⏳ 识别中...';
+  batchProgress.style.display = 'flex';
+
+  if (!receivedMeta) {
+    resetReceiverState();
+    clearScanLog();
+  }
+
+  let decoded = 0;
+  let failed = 0;
+
+  for (let i = 0; i < imageFiles.length; i++) {
+    const file = imageFiles[i];
+    batchProgressFill.style.width = `${((i) / imageFiles.length) * 100}%`;
+    batchProgressText.textContent = `${i}/${imageFiles.length}`;
+
+    try {
+      const result = await decodeImageFile(file);
+      if (result) {
+        decoded++;
+        processRawData(result);
+      } else {
+        failed++;
+        addScanLog('警告', `图片 ${i+1} (${file.name}) 未识别到二维码`, 'dup');
+      }
+    } catch (err) {
+      failed++;
+      addScanLog('错误', `图片 ${i+1} (${file.name}) 解码失败: ${err.message}`, 'end');
+    }
+  }
+
+  batchProgressFill.style.width = '100%';
+  batchProgressText.textContent = `${imageFiles.length}/${imageFiles.length}`;
+  batchDecodeBtn.textContent = '▶ 批量识别';
+  batchDecodeBtn.disabled = false;
+  isBatchDecoding = false;
+  addScanLog('系统', `批量识别完成：成功 ${decoded} 张，失败 ${failed} 张`, decoded > 0 ? 'success' : 'end');
+}
+
+function decodeImageFile(file) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const maxDim = 1200;
+      let w = img.naturalWidth;
+      let h = img.naturalHeight;
+      if (w > maxDim || h > maxDim) {
+        const ratio = Math.min(maxDim / w, maxDim / h);
+        w = Math.round(w * ratio);
+        h = Math.round(h * ratio);
+      }
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      const imageData = ctx.getImageData(0, 0, w, h);
+      const code = jsQR(imageData.data, w, h, { inversionAttempts: 'attemptBoth' });
+      URL.revokeObjectURL(img.src);
+      resolve(code ? code.data : null);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(img.src);
+      resolve(null);
+    };
+    img.src = URL.createObjectURL(file);
+  });
 }
 
 // ---- Scanning Engine ----
@@ -1739,6 +1915,7 @@ function processRawData(raw) {
   try {
     const bytes = base64ToUint8(raw);
     if (bytes.length < 1) return;
+    scanCounter++;
     const data = xorEncrypt(bytes, getReceiverPassword());
     const type = data[0];
 
@@ -1810,7 +1987,8 @@ function parseFileData(bytes) {
   rcvChunks.textContent = receivedChunks.size;
   flashDecode('success');
   const shortPath = path.length > 40 ? '...' + path.slice(-37) : path;
-  addScanLog('数据', `[${fileIdx}] ${shortPath} (${chunkIdx + 1}/${totalChunks})`, 'success');
+  const fileSize = file ? formatSize(file.fileSize) : '?';
+  addScanLog('数据', `[${fileIdx}] ${shortPath} (${chunkIdx + 1}/${totalChunks}) ${formatSize(data.length)}/${fileSize}`, 'success');
   updateProgressRing();
   updateMissingChunksList();
 }
@@ -1934,9 +2112,23 @@ function clearScanLog() {
 function addScanLog(tag, msg, type = 'success') {
   const entry = document.createElement('div');
   entry.className = 'scan-entry';
+
+  let detail = '';
+  if (receivedMeta && type !== 'meta' && type !== 'end') {
+    const pct = totalExpectedChunks > 0 ? Math.round((receivedChunks.size / totalExpectedChunks) * 100) : 0;
+    detail = ` [#${receivedChunks.size}/${totalExpectedChunks} ${pct}%]`;
+  }
+  if (scanCounter > 0 && type !== 'meta') {
+    detail += ` 帧#${scanCounter}`;
+  }
+  if (scanStartTime && type !== 'meta') {
+    const elapsed = Math.floor((Date.now() - scanStartTime) / 1000);
+    detail += ` +${elapsed}s`;
+  }
+
   entry.innerHTML = `
     <span class="dot ${type}"></span>
-    <span class="msg"><strong>${tag}</strong> ${msg}</span>
+    <span class="msg"><strong>${tag}</strong> ${msg}${detail}</span>
     <span class="time">${formatTime()}</span>
   `;
   if (scanLog.querySelector('.file-empty')) {
