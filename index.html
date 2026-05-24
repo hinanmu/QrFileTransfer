@@ -7,9 +7,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
-<!-- CDN: qrcodejs → cdnjs, jsQR → jsdelivr -->
+<!-- CDN: qrcodejs + @zxing/library -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0/umd/index.min.js"></script>
 <style>
 :root {
   --bg-primary: #f5f7fa;
@@ -445,22 +445,6 @@ body::before {
   color: var(--cyan);
   min-width: 80px;
   text-align: center;
-}
-
-.carousel-controls .progress-bar {
-  flex: 1;
-  max-width: 400px;
-  height: 4px;
-  background: var(--gray);
-  border-radius: 2px;
-  overflow: hidden;
-}
-
-.carousel-controls .progress-bar .fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--cyan), var(--purple));
-  border-radius: 2px;
-  transition: width 0.3s ease;
 }
 
 /* Speed Slider */
@@ -975,13 +959,10 @@ input[type="file"] { display: none; }
         <div class="carousel-controls" style="margin-top:20px;">
           <button class="btn btn-icon" id="prev-btn" disabled>‹</button>
           <div class="progress" id="progress-text">— / —</div>
-          <div class="progress-bar">
-            <div class="fill" id="progress-fill" style="width:0%;"></div>
-          </div>
           <button class="btn btn-icon" id="next-btn" disabled>›</button>
           <button class="btn btn-sm" id="play-btn" disabled>▶ 播放</button>
         </div>
-        <input type="range" id="qr-scrollbar" min="0" max="0" value="0" style="width:100%;margin-top:16px;accent-color:var(--cyan);height:6px;cursor:pointer;">
+        <input type="range" id="qr-scrollbar" min="0" max="0" value="0" style="width:100%;margin-top:12px;height:6px;cursor:pointer;-webkit-appearance:none;appearance:none;background:var(--gray);border-radius:3px;outline:none;" class="qr-scrollbar">
       </div>
     </div>
   </section>
@@ -1171,8 +1152,6 @@ const prevBtn = $('prev-btn');
 const nextBtn = $('next-btn');
 const playBtn = $('play-btn');
 const progressText = $('progress-text');
-const progressFill = $('progress-fill');
-const progressBar = document.querySelector('.carousel-controls .progress-bar');
 const qrScrollbar = $('qr-scrollbar');
 const speedSlider = $('speed-slider');
 const speedDisplay = $('speed-display');
@@ -1735,7 +1714,6 @@ function showQRCode(index) {
     </div>`;
   }
   progressText.textContent = `${index + 1} / ${qrCodeData.length}`;
-  progressFill.style.width = `${((index + 1) / qrCodeData.length) * 100}%`;
   qrScrollbar.max = qrCodeData.length - 1;
   qrScrollbar.value = index;
 
@@ -1764,30 +1742,6 @@ nextBtn.addEventListener('click', () => {
 playBtn.addEventListener('click', () => {
   if (isPlaying) stopPlayback();
   else startPlayback();
-});
-
-let isDraggingProgress = false;
-progressBar.addEventListener('mousedown', e => {
-  if (!qrCodeData.length) return;
-  isDraggingProgress = true;
-  const rect = progressBar.getBoundingClientRect();
-  const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-  const idx = Math.round(pct * (qrCodeData.length - 1));
-  currentIndex = idx;
-  showQRCode(currentIndex);
-  updateCarouselControls();
-});
-document.addEventListener('mousemove', e => {
-  if (!isDraggingProgress || !qrCodeData.length) return;
-  const rect = progressBar.getBoundingClientRect();
-  const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-  const idx = Math.round(pct * (qrCodeData.length - 1));
-  currentIndex = idx;
-  showQRCode(currentIndex);
-  updateCarouselControls();
-});
-document.addEventListener('mouseup', () => {
-  isDraggingProgress = false;
 });
 
 qrScrollbar.addEventListener('input', () => {
@@ -2052,10 +2006,15 @@ function decodeImageFile(file) {
       canvas.height = h;
       const ctx = canvas.getContext('2d');
       ctx.drawImage(img, 0, 0, w, h);
-      const imageData = ctx.getImageData(0, 0, w, h);
-      const code = jsQR(imageData.data, w, h, { inversionAttempts: 'attemptBoth' });
       URL.revokeObjectURL(img.src);
-      resolve(code ? code.data : null);
+      const reader = new ZXing.BrowserQRCodeReader();
+      reader.decodeFromCanvas(canvas).then(result => {
+        reader.reset();
+        resolve(result.getText());
+      }).catch(() => {
+        reader.reset();
+        resolve(null);
+      });
     };
     img.onerror = () => {
       URL.revokeObjectURL(img.src);
@@ -2085,96 +2044,195 @@ function exportImages() {
 function processRawData(raw) {
   try {
     const bytes = base64ToUint8(raw);
-    if (bytes.length < 1) return;
+    if (bytes.length < 1) return false;
     scanCounter++;
     const data = xorEncrypt(bytes, getReceiverPassword());
     const type = data[0];
 
-    if (type === PACKET_TYPE.META_DATA) {
-      parseMetaData(data);
-    } else if (type === PACKET_TYPE.FILE_DATA) {
-      parseFileData(data);
-    } else if (type === PACKET_TYPE.TRANSFER_END) {
-      onTransferEnd(data);
-    }
+    if (type === PACKET_TYPE.META_DATA) return parseMetaData(data);
+    if (type === PACKET_TYPE.FILE_DATA) return parseFileData(data);
+    if (type === PACKET_TYPE.TRANSFER_END) return onTransferEnd(data);
   } catch (e) {
     console.warn('解码失败:', e);
   }
+  return false;
 }
 
 function parseMetaData(bytes) {
-  if (receivedMeta) return;
+  if (receivedMeta) return 'duplicate';
+  if (!canRead(bytes, 1, 4)) return false;
+
   let off = 1;
   const fileCount = readUint32BE(bytes, off); off += 4;
+  if (fileCount > MAX_FILE_COUNT) return false;
+
   const files = [];
+  let expectedDataChunks = 0;
   for (let i = 0; i < fileCount; i++) {
+    if (!canRead(bytes, off, 2)) return false;
     const pathLen = readUint16BE(bytes, off); off += 2;
+    if (pathLen > MAX_PATH_BYTES || !canRead(bytes, off, pathLen + 12)) return false;
     const path = uint8ToStr(bytes.slice(off, off + pathLen)); off += pathLen;
     const sizeHi = readUint32BE(bytes, off); off += 4;
     const sizeLo = readUint32BE(bytes, off); off += 4;
     const fileSize = sizeHi * 0x100000000 + sizeLo;
     const totalChunks = readUint32BE(bytes, off); off += 4;
-    files.push({ path, fileSize, totalChunks, data: new Array(totalChunks), received: 0 });
-    totalExpectedChunks += totalChunks;
+    if (totalChunks > MAX_CHUNKS_PER_FILE) return false;
+    files.push({ path, fileSize, totalChunks, data: new Array(totalChunks), received: 0, provisional: false });
+    expectedDataChunks += totalChunks;
   }
-  totalExpectedChunks += 2; // +元数据(0x02) + 传输结束(0x03)
+
+  const mergedChunks = new Map();
+  for (const [key, data] of receivedChunks.entries()) {
+    const [fileIdx, chunkIdx] = key.split('-').map(Number);
+    const file = files[fileIdx];
+    if (!file || chunkIdx < 0 || chunkIdx >= file.totalChunks) continue;
+    if (!file.data[chunkIdx]) file.received++;
+    file.data[chunkIdx] = data;
+    mergedChunks.set(key, data);
+  }
+
   receivedMeta = { files };
   receivedFiles = new Map();
   files.forEach((f, i) => receivedFiles.set(i, f));
+  receivedChunks = mergedChunks;
+  totalExpectedChunks = expectedDataChunks + 2; // metadata + end marker
   metaReceived = true;
+
   rcvFiles.textContent = files.length;
   rcvTotal.textContent = totalExpectedChunks;
+  rcvChunks.textContent = getReceivedCount();
   rcvStatus.textContent = '接收中';
   receiverProgress.style.display = 'flex';
   flashDecode('success');
-  addScanLog('元数据', `收到 ${files.length} 个文件, 共 ${totalExpectedChunks} 片`, 'meta');
+  addScanLog('元数据', `收到 ${files.length} 个文件，共 ${expectedDataChunks} 个数据分片`, 'meta');
   updateProgressRing();
+  updateMissingChunksList();
+  maybeCompleteTransfer('元数据到达后已确认所有分片齐全，开始重组文件...');
+  return 'accepted';
 }
 
 function parseFileData(bytes) {
-  if (!receivedMeta) return;
-  let off = 0;
-  off++; // type
+  let off = 1;
+  if (!canRead(bytes, off, 14)) return false;
   const fileIdx = readUint32BE(bytes, off); off += 4;
   const chunkIdx = readUint32BE(bytes, off); off += 4;
   const totalChunks = readUint32BE(bytes, off); off += 4;
   const pathLen = readUint16BE(bytes, off); off += 2;
+  if (fileIdx >= MAX_FILE_COUNT || totalChunks < 1 || totalChunks > MAX_CHUNKS_PER_FILE) return false;
+  if (chunkIdx >= totalChunks || pathLen > MAX_PATH_BYTES || !canRead(bytes, off, pathLen + 4)) return false;
+
   const path = uint8ToStr(bytes.slice(off, off + pathLen)); off += pathLen;
   const dataLen = readUint32BE(bytes, off); off += 4;
+  if (dataLen > CHUNK_DATA_SIZE || !canRead(bytes, off, dataLen)) return false;
   const data = bytes.slice(off, off + dataLen);
 
+  let file = receivedFiles.get(fileIdx);
+  if (receivedMeta) {
+    if (!file || chunkIdx >= file.totalChunks || totalChunks !== file.totalChunks || path !== file.path) return false;
+  } else if (!file) {
+    file = { path, fileSize: null, totalChunks, data: new Array(totalChunks), received: 0, provisional: true };
+    receivedFiles.set(fileIdx, file);
+    totalExpectedChunks += totalChunks;
+    receiverProgress.style.display = 'flex';
+    rcvStatus.textContent = '等待元数据';
+    logOncePer('provisional-data', 3000, '提示', '先收到数据分片，已暂存并等待元数据校准', 'meta');
+  }
+
   const key = `${fileIdx}-${chunkIdx}`;
-  if (receivedChunks.has(key)) return;
+  if (receivedChunks.has(key)) {
+    flashDecode('dup');
+    logOncePer(`dup-${key}`, DUPLICATE_LOG_INTERVAL_MS, '重复', `已接收 [${fileIdx}] ${path} (${chunkIdx + 1}/${totalChunks})`, 'dup');
+    return 'duplicate';
+  }
 
   receivedChunks.set(key, data);
-  const file = receivedFiles.get(fileIdx);
   if (file) {
+    if (!file.data[chunkIdx]) file.received = (file.received || 0) + 1;
     file.data[chunkIdx] = data;
-    file.received = (file.received || 0) + 1;
   }
 
   rcvChunks.textContent = getReceivedCount();
+  rcvFiles.textContent = receivedMeta ? receivedMeta.files.length : receivedFiles.size;
+  rcvTotal.textContent = totalExpectedChunks || '未知';
   flashDecode('success');
   const shortPath = path.length > 40 ? '...' + path.slice(-37) : path;
-  const fileSize = file ? formatSize(file.fileSize) : '?';
+  const fileSize = file && file.fileSize != null ? formatSize(file.fileSize) : '?';
   addScanLog('数据', `[${fileIdx}] ${shortPath} (${chunkIdx + 1}/${totalChunks}) ${formatSize(data.length)}/${fileSize}`, 'success');
   updateProgressRing();
   updateMissingChunksList();
+  maybeCompleteTransfer('已收齐所有分片，开始重组文件...');
+  return 'accepted';
 }
 
 function onTransferEnd(bytes) {
-  if (!receivedMeta) return;
+  if (!canRead(bytes, 1, 4)) return false;
+  transferEndFileCount = readUint32BE(bytes, 1);
   endReceived = true;
-  addScanLog('完成', '传输结束标记已接收，开始重组文件...', 'end');
+  rcvChunks.textContent = getReceivedCount();
   flashDecode('success');
-  stopScanning();
-  stopCamera();
-  rcvStatus.textContent = '重组中';
-  reconstructFiles();
+
+  if (isTransferComplete()) {
+    completeTransfer('收到结束标记，所有分片已齐，开始重组文件...');
+  } else {
+    const missing = getMissingChunkCount();
+    rcvStatus.textContent = missing > 0 ? '等待缺失' : '等待元数据';
+    updateMissingChunksList();
+    logOncePer(`end-wait-${missing}`, 2000, '结束', missing > 0
+      ? `收到结束标记，但仍缺失 ${missing} 片，继续等待下一轮`
+      : '收到结束标记，继续等待元数据或数据分片', 'meta');
+  }
+  updateProgressRing();
+  return 'accepted';
 }
 
 function getReceivedCount() {
   return receivedChunks.size + (metaReceived ? 1 : 0) + (endReceived ? 1 : 0);
+}
+
+function getExpectedDataChunkCount() {
+  return Math.max(0, totalExpectedChunks - (metaReceived ? 2 : 0));
+}
+
+function getMissingChunkCount() {
+  if (!receivedFiles.size) return 0;
+  let missing = 0;
+  receivedFiles.forEach((file, fileIdx) => {
+    for (let chunkIdx = 0; chunkIdx < file.totalChunks; chunkIdx++) {
+      if (!receivedChunks.has(`${fileIdx}-${chunkIdx}`)) missing++;
+    }
+  });
+  return missing;
+}
+
+function hasKnownFileSet() {
+  if (receivedMeta) return true;
+  if (transferEndFileCount == null) return false;
+  if (receivedFiles.size !== transferEndFileCount) return false;
+  for (let i = 0; i < transferEndFileCount; i++) {
+    if (!receivedFiles.has(i)) return false;
+  }
+  return true;
+}
+
+function isTransferComplete() {
+  if (!hasKnownFileSet()) return false;
+  return getMissingChunkCount() === 0;
+}
+
+function maybeCompleteTransfer(message) {
+  if (isTransferComplete()) completeTransfer(message);
+}
+
+function completeTransfer(message) {
+  if (hasReconstructed) return;
+  hasReconstructed = true;
+  addScanLog('完成', message, 'end');
+  flashDecode('success');
+  stopScanning();
+  stopCamera({ keepRestart: true });
+  rcvStatus.textContent = '重组中';
+  reconstructFiles();
 }
 
 function flashDecode(type) {
@@ -2193,7 +2251,7 @@ function updateProgressRing() {
 }
 
 function updateMissingChunksList() {
-  if (!receivedMeta) return;
+  if (!receivedFiles.size) return;
   const container = document.getElementById('missing-chunks-container');
   const listDiv = document.getElementById('missing-chunks-list');
   const noneDiv = document.getElementById('missing-none');
@@ -2207,20 +2265,23 @@ function updateMissingChunksList() {
       if (!receivedChunks.has(key)) {
         anyMissing = true;
         missingCount++;
-        // Find position in qrCodeData (meta is 0, then file chunks, then end)
-        let qrIdx = 1; // skip meta
-        let foundFile = false;
-        for (let fi = 0; fi < receivedMeta.files.length; fi++) {
-          if (fi === fileIdx) { foundFile = true; break; }
-          qrIdx += receivedMeta.files[fi].totalChunks;
+        let qrIdx = null;
+        if (receivedMeta) {
+          qrIdx = 1; // skip meta
+          for (let fi = 0; fi < receivedMeta.files.length; fi++) {
+            if (fi === fileIdx) break;
+            qrIdx += receivedMeta.files[fi].totalChunks;
+          }
+          qrIdx += chunkIdx;
         }
-        qrIdx += chunkIdx;
 
         const btn = document.createElement('button');
         btn.className = 'btn btn-sm';
         btn.style.cssText = 'padding:6px 10px;font-size:11px;border-color:rgba(255,45,120,0.3);color:#ffd700;';
         btn.textContent = `[${fileIdx}] ${chunkIdx + 1}`;
-        btn.title = `${file.path} 第 ${chunkIdx + 1}/${file.totalChunks} 片 (QR ${qrIdx})`;
+        btn.title = qrIdx == null
+          ? `${file.path} 第 ${chunkIdx + 1}/${file.totalChunks} 片`
+          : `${file.path} 第 ${chunkIdx + 1}/${file.totalChunks} 片 (QR ${qrIdx})`;
         listDiv.appendChild(btn);
       }
     }
@@ -2229,9 +2290,10 @@ function updateMissingChunksList() {
   container.style.display = anyMissing ? 'block' : 'none';
   noneDiv.style.display = anyMissing ? 'none' : 'block';
 
-  if (anyMissing) {
+  if (anyMissing && missingCount !== lastMissingCount) {
     addScanLog('状态', `缺失 ${missingCount} 片`, 'meta');
   }
+  lastMissingCount = missingCount;
 }
 
 // ---- File Reconstruction ----
@@ -2363,8 +2425,8 @@ function resetReceiverState() {
 if (typeof QRCode === 'undefined') {
   showError('QRCode 库加载失败，请检查网络连接');
 }
-if (typeof jsQR === 'undefined') {
-  showError('jsQR 库加载失败，请检查网络连接');
+if (typeof ZXing === 'undefined') {
+  showError('ZXing 库加载失败，请检查网络连接');
 }
 
 switchMode(currentMode, true);
@@ -2379,7 +2441,7 @@ function showError(msg) {
 }
 
 console.log('QrFileTransfer initialized');
-console.log(`QR Version 40 | Byte Mode | Level L | ${CHUNK_DATA_SIZE} bytes/chunk | XOR加密可用`);
+console.log(`QR Version 40 | Byte Mode | Level L | ${CHUNK_DATA_SIZE} bytes/chunk | ZXing解码 | XOR加密可用`);
 </script>
 </body>
 </html>
