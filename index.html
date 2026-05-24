@@ -996,6 +996,15 @@ input[type="file"] { display: none; }
               onfocus="this.style.borderColor='var(--purple)'" onblur="this.style.borderColor='var(--gray)'">
             <button class="btn btn-icon" type="button" style="width:30px;height:30px;font-size:14px;padding:0;" onclick="const ip=document.getElementById('receiver-password');ip.type=ip.type==='password'?'text':'password';this.textContent=ip.type==='password'?'👁':'👁‍🗨'">👁</button>
           </div>
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
+            <label style="display:flex;align-items:center;gap:4px;font-family:var(--font-mono);font-size:12px;color:var(--text-dim);cursor:pointer;">
+              <input type="checkbox" id="auto-save-cam-toggle" checked style="accent-color:var(--purple);transform:scale(1.2);">
+              📷 自动截图
+            </label>
+            <button class="btn btn-sm" id="manual-screenshot-btn" disabled style="font-size:11px;">📸 截图</button>
+            <button class="btn btn-sm" id="download-all-frames-btn" disabled style="font-size:11px;border-color:var(--purple);color:var(--purple);">💾 导出截图</button>
+            <span id="frame-count-badge" style="font-family:var(--font-mono);font-size:11px;color:var(--text-dim);display:none;">已存 0 帧</span>
+          </div>
 
           <div class="camera-view" id="camera-view">
             <video id="camera-video" autoplay playsinline muted></video>
@@ -1129,6 +1138,11 @@ let totalExpectedChunks = 0;
 let imageFiles = [];
 let isBatchDecoding = false;
 
+// Camera frame capture state
+let autoSaveCamFrames = true;
+let savedFrameKeys = new Set();
+let frameCaptureCount = 0;
+
 // ---- DOM refs ----
 const $ = id => document.getElementById(id);
 const senderSection = $('sender-section');
@@ -1177,6 +1191,10 @@ const imagePreviewArea = $('image-preview-area');
 const batchProgress = $('batch-progress');
 const batchProgressFill = $('batch-progress-fill');
 const batchProgressText = $('batch-progress-text');
+const autoSaveCamToggle = $('auto-save-cam-toggle');
+const manualScreenshotBtn = $('manual-screenshot-btn');
+const downloadAllFramesBtn = $('download-all-frames-btn');
+const frameCountBadge = $('frame-count-badge');
 
 const circumference = 2 * Math.PI * 34;
 
@@ -1730,6 +1748,9 @@ async function startCamera() {
     startCameraBtn.disabled = true;
     stopCameraBtn.disabled = false;
     restartReceiverBtn.disabled = false;
+    manualScreenshotBtn.disabled = false;
+    autoSaveCamFrames = autoSaveCamToggle.checked;
+    savedFrameKeys = new Set();
     scanCounter = 0;
     scanStartTime = Date.now();
     clearScanLog();
@@ -1754,6 +1775,7 @@ function stopCamera() {
   startCameraBtn.disabled = false;
   stopCameraBtn.disabled = true;
   restartReceiverBtn.disabled = true;
+  manualScreenshotBtn.disabled = true;
 }
 
 restartReceiverBtn.addEventListener('click', restartReceiver);
@@ -1765,6 +1787,12 @@ function restartReceiver() {
   totalExpectedChunks = 0;
   scanCounter = 0;
   scanStartTime = mediaStream ? Date.now() : null;
+  savedFrameKeys = new Set();
+  frameCaptureCount = 0;
+  downloadAllFramesBtn.disabled = true;
+  frameCountBadge.style.display = 'none';
+  imageFiles = imageFiles.filter(f => !f.name.startsWith('qr_frame_'));
+  renderImagePreviews();
   resetReceiverState();
   clearScanLog();
 
@@ -1779,17 +1807,83 @@ function restartReceiver() {
 }
 
 // ============================================================
+// CAMERA FRAME CAPTURE
+// ============================================================
+
+autoSaveCamToggle.addEventListener('change', () => {
+  autoSaveCamFrames = autoSaveCamToggle.checked;
+});
+
+manualScreenshotBtn.addEventListener('click', () => {
+  const file = captureCamFrame('manual');
+  if (file) {
+    addScanLog('系统', `手动截图已保存: ${file.name}`, 'meta');
+    updateFrameBadge();
+  }
+});
+
+downloadAllFramesBtn.addEventListener('click', downloadAllFrames);
+
+function captureCamFrame(source = 'auto') {
+  if (cameraVideo.readyState < 2) return null;
+  const canvas = document.createElement('canvas');
+  canvas.width = cameraVideo.videoWidth || 640;
+  canvas.height = cameraVideo.videoHeight || 480;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(cameraVideo, 0, 0, canvas.width, canvas.height);
+  const blob = canvas.toDataURL('image/png');
+  const byteString = atob(blob.split(',')[1]);
+  const ab = new ArrayBuffer(byteString.length);
+  const ia = new Uint8Array(ab);
+  for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
+  const file = new File([ab], `qr_frame_${String(frameCaptureCount).padStart(4, '0')}.png`, { type: 'image/png' });
+  frameCaptureCount++;
+  imageFiles.push(file);
+  renderImagePreviews();
+  batchDecodeBtn.disabled = false;
+  return file;
+}
+
+function updateFrameBadge() {
+  const count = frameCaptureCount;
+  if (count > 0) {
+    frameCountBadge.style.display = 'inline';
+    frameCountBadge.textContent = `已存 ${count} 帧`;
+    downloadAllFramesBtn.disabled = false;
+  }
+}
+
+function downloadAllFrames() {
+  const cameraFrames = imageFiles.filter(f => f && f.name.startsWith('qr_frame_'));
+  if (cameraFrames.length === 0) {
+    addScanLog('系统', '没有可导出的截图', 'end');
+    return;
+  }
+  for (const f of cameraFrames) {
+    const url = URL.createObjectURL(f);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = f.name;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+  addScanLog('系统', `已导出 ${cameraFrames.length} 张截图`, 'success');
+}
+
+// ============================================================
 // IMAGE BATCH DECODE
 // ============================================================
 
 selectQrImagesBtn.addEventListener('click', () => qrImageInput.click());
 
 qrImageInput.addEventListener('change', e => {
-  imageFiles = Array.from(e.target.files || []);
+  const userFiles = Array.from(e.target.files || []);
+  const camFrames = imageFiles.filter(f => f.name.startsWith('qr_frame_'));
+  imageFiles = [...camFrames, ...userFiles];
   batchDecodeBtn.disabled = imageFiles.length === 0 || isBatchDecoding;
   renderImagePreviews();
-  if (imageFiles.length > 0) {
-    addScanLog('系统', `选择了 ${imageFiles.length} 张二维码图片`, 'meta');
+  if (userFiles.length > 0) {
+    addScanLog('系统', `选择了 ${userFiles.length} 张二维码图片`, 'meta');
   }
 });
 
@@ -1800,12 +1894,14 @@ function renderImagePreviews() {
     </div>`;
     return;
   }
-  imagePreviewArea.innerHTML = imageFiles.map((f, i) =>
-    `<div style="position:relative;width:80px;height:80px;border-radius:6px;overflow:hidden;border:1px solid var(--gray);flex-shrink:0;" title="${f.name}">
+  imagePreviewArea.innerHTML = imageFiles.map((f, i) => {
+    const isCamFrame = f.name.startsWith('qr_frame_');
+    return `<div style="position:relative;width:80px;height:80px;border-radius:6px;overflow:hidden;border:1px solid ${isCamFrame ? 'var(--purple)' : 'var(--gray)'};flex-shrink:0;" title="${f.name}">
       <img src="${URL.createObjectURL(f)}" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.style.display='none'">
       <span style="position:absolute;bottom:0;right:0;background:rgba(0,0,0,0.6);color:#fff;font-size:10px;padding:1px 4px;border-radius:3px 0 0 0;font-family:var(--font-mono);">${i+1}</span>
-    </div>`
-  ).join('');
+      ${isCamFrame ? '<span style="position:absolute;top:0;left:0;background:var(--purple);color:#fff;font-size:9px;padding:1px 3px;border-radius:0 0 3px 0;font-family:var(--font-mono);">📷</span>' : ''}
+    </div>`;
+  }).join('');
 }
 
 batchDecodeBtn.addEventListener('click', startBatchDecode);
@@ -1982,6 +2078,13 @@ function parseFileData(bytes) {
   if (file) {
     file.data[chunkIdx] = data;
     file.received = (file.received || 0) + 1;
+  }
+
+  // Camera frame auto-save
+  if (autoSaveCamFrames && mediaStream && !savedFrameKeys.has(key)) {
+    savedFrameKeys.add(key);
+    captureCamFrame('auto');
+    updateFrameBadge();
   }
 
   rcvChunks.textContent = receivedChunks.size;
