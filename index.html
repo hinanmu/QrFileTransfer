@@ -1099,8 +1099,8 @@ input[type="file"] { display: none; }
 // ============================================================
 
 // ---- Constants ----
-const CHUNK_DATA_SIZE = 1470;
-const SCAN_INTERVAL_MS = 120;
+const CHUNK_DATA_SIZE = 1029;
+const CAPTURE_INTERVAL_MS = 500;
 const DUPLICATE_LOG_INTERVAL_MS = 1200;
 const FRAME_FILE_PREFIX = 'qr_frame_';
 const MAX_FILE_COUNT = 10000;
@@ -1127,8 +1127,6 @@ let prefetchTimer = null;
 // Receiver state
 let mediaStream = null;
 let isScanning = false;
-let scanInterval = null;
-let lastScanAt = 0;
 let scanCounter = 0;
 let scanStartTime = null;
 let receivedChunks = new Map(); // "fileIdx-chunkIdx" -> Uint8Array
@@ -1145,9 +1143,9 @@ let imageFiles = [];
 let isBatchDecoding = false;
 
 // Camera frame capture state
-let savedFrameKeys = new Set();
 let frameCaptureCount = 0;
-let camFrameObjectUrls = new Map();
+let scanTimer = null;
+let isDecoding = false;
 let imagePreviewObjectUrls = new Map();
 
 // ---- DOM refs ----
@@ -1852,7 +1850,6 @@ async function startCamera() {
     startCameraBtn.disabled = true;
     stopCameraBtn.disabled = false;
     restartBtn.disabled = false;
-    savedFrameKeys = new Set();
     scanStartTime = Date.now();
     clearScanLog();
     addScanLog('系统', `摄像头已启动 ${cameraVideo.videoWidth}×${cameraVideo.videoHeight}，正在截图...`, 'meta');
@@ -1886,7 +1883,6 @@ function restartReceiver() {
   hasReconstructed = false;
   lastMissingCount = null;
   duplicateLogCache = new Map();
-  savedFrameKeys = new Set();
   frameCaptureCount = 0;
   imageFiles = imageFiles.filter(f => !f.name.startsWith('qr_frame_'));
   resetReceiverState();
@@ -1904,25 +1900,18 @@ function restartReceiver() {
 function startScanning() {
   if (isScanning) return;
   isScanning = true;
-  scanLoop();
+  scanTimer = setInterval(captureAndDecode, 500);
 }
 
 function stopScanning() {
   isScanning = false;
-  if (scanInterval) { cancelAnimationFrame(scanInterval); scanInterval = null; }
+  if (scanTimer) { clearInterval(scanTimer); scanTimer = null; }
 }
 
-function scanLoop() {
-  if (!isScanning) return;
-  if (cameraVideo.readyState >= 2) {
-    captureCamFrame();
-  }
-  scanInterval = requestAnimationFrame(scanLoop);
-}
-
-// ---- Frame Capture ----
-function captureCamFrame() {
-  if (cameraVideo.readyState < 2) return;
+// ---- Frame Capture + Decode ----
+function captureAndDecode() {
+  if (!isScanning || cameraVideo.readyState < 2 || isDecoding) return;
+  isDecoding = true;
   const c = document.createElement('canvas');
   c.width = cameraVideo.videoWidth || 640;
   c.height = cameraVideo.videoHeight || 480;
@@ -1936,7 +1925,13 @@ function captureCamFrame() {
   frameCaptureCount++;
   imageFiles.push(file);
   updateImageGallery();
-  flashDecode('save');
+  decodeImageFile(file).then(result => {
+    isDecoding = false;
+    if (result) {
+      processRawData(result);
+      flashDecode('success');
+    }
+  });
 }
 
 function updateImageGallery() {
@@ -2113,24 +2108,13 @@ function parseFileData(bytes) {
   const data = bytes.slice(off, off + dataLen);
 
   const key = `${fileIdx}-${chunkIdx}`;
-  if (receivedChunks.has(key)) {
-    flashDecode('fail');
-    addScanLog('重复', `跳过已接收分片 [${fileIdx}] ${path} (${chunkIdx + 1}/${totalChunks})`, 'dup');
-    return;
-  }
+  if (receivedChunks.has(key)) return;
 
   receivedChunks.set(key, data);
   const file = receivedFiles.get(fileIdx);
   if (file) {
     file.data[chunkIdx] = data;
     file.received = (file.received || 0) + 1;
-  }
-
-  // Camera frame auto-save
-  if (mediaStream && !savedFrameKeys.has(key)) {
-    savedFrameKeys.add(key);
-    captureCamFrame();
-    updateFrameBadge();
   }
 
   rcvChunks.textContent = receivedChunks.size;
