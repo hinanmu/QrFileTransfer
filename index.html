@@ -12,19 +12,19 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <style>
 :root {
-  --bg-primary: #08080f;
-  --bg-secondary: #0d0d1a;
-  --bg-card: #12122a;
-  --cyan: #00f0c8;
-  --cyan-dim: rgba(0, 240, 200, 0.15);
-  --purple: #7b3fff;
-  --purple-dim: rgba(123, 63, 255, 0.15);
-  --pink: #ff2d78;
-  --gray: #1a1a3a;
-  --gray-light: #2a2a5a;
-  --text: #c8d0e0;
-  --text-dim: #6a7a9a;
-  --text-bright: #e8f0ff;
+  --bg-primary: #f5f7fa;
+  --bg-secondary: #eef1f5;
+  --bg-card: #ffffff;
+  --cyan: #00b894;
+  --cyan-dim: rgba(0, 184, 148, 0.1);
+  --purple: #6c5ce7;
+  --purple-dim: rgba(108, 92, 231, 0.1);
+  --pink: #e84393;
+  --gray: #dfe6e9;
+  --gray-light: #b2bec3;
+  --text: #2d3436;
+  --text-dim: #636e72;
+  --text-bright: #1a1a2e;
   --radius: 12px;
   --font-mono: 'Share Tech Mono', monospace;
   --font-body: 'Space Grotesk', sans-serif;
@@ -46,9 +46,8 @@ body::before {
   position: fixed;
   inset: 0;
   background:
-    radial-gradient(ellipse at 20% 50%, rgba(0, 240, 200, 0.03) 0%, transparent 50%),
-    radial-gradient(ellipse at 80% 50%, rgba(123, 63, 255, 0.03) 0%, transparent 50%),
-    repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0, 240, 200, 0.008) 2px, rgba(0, 240, 200, 0.008) 4px);
+    radial-gradient(ellipse at 20% 50%, rgba(0, 184, 148, 0.04) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 50%, rgba(108, 92, 231, 0.04) 0%, transparent 50%);
   pointer-events: none;
   z-index: 0;
 }
@@ -67,9 +66,9 @@ body::before {
   align-items: center;
   justify-content: space-between;
   padding: 16px 32px;
-  background: rgba(8, 8, 15, 0.85);
+  background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(12px);
-  border-bottom: 1px solid rgba(0, 240, 200, 0.1);
+  border-bottom: 1px solid rgba(0, 184, 148, 0.12);
 }
 
 .logo {
@@ -141,14 +140,14 @@ body::before {
 
 .mode-btn.active {
   background: var(--cyan);
-  color: var(--bg-primary);
+  color: #fff;
   font-weight: 700;
-  box-shadow: 0 0 20px rgba(0, 240, 200, 0.3);
+  box-shadow: 0 0 20px rgba(0, 184, 148, 0.25);
 }
 
 .mode-btn.active.receiver-active {
   background: var(--purple);
-  box-shadow: 0 0 20px rgba(123, 63, 255, 0.3);
+  box-shadow: 0 0 20px rgba(108, 92, 231, 0.25);
 }
 
 .mode-btn .key-hint {
@@ -250,14 +249,14 @@ body::before {
 
 .btn-primary {
   background: var(--cyan);
-  color: var(--bg-primary);
+  color: #fff;
   border-color: var(--cyan);
   font-weight: 700;
 }
 
 .btn-primary:hover {
-  background: #00dbb8;
-  box-shadow: 0 0 25px rgba(0, 240, 200, 0.3);
+  background: #00a381;
+  box-shadow: 0 0 25px rgba(0, 184, 148, 0.25);
 }
 
 .btn-primary:disabled {
@@ -268,13 +267,13 @@ body::before {
 
 .btn-purple {
   background: var(--purple);
-  color: white;
+  color: #fff;
   border-color: var(--purple);
 }
 
 .btn-purple:hover {
-  background: #6a30e8;
-  box-shadow: 0 0 25px rgba(123, 63, 255, 0.3);
+  background: #5b4bd4;
+  box-shadow: 0 0 25px rgba(108, 92, 231, 0.25);
 }
 
 .btn-sm {
@@ -303,7 +302,7 @@ body::before {
   align-items: center;
   justify-content: space-between;
   padding: 8px 12px;
-  background: rgba(0, 240, 200, 0.02);
+  background: rgba(0, 184, 148, 0.03);
   border-radius: 6px;
   border: 1px solid transparent;
   transition: all 0.2s;
@@ -311,8 +310,8 @@ body::before {
 }
 
 .file-item:hover {
-  border-color: rgba(0, 240, 200, 0.1);
-  background: rgba(0, 240, 200, 0.04);
+  border-color: rgba(0, 184, 148, 0.12);
+  background: rgba(0, 184, 148, 0.05);
 }
 
 .file-item .name {
@@ -356,7 +355,7 @@ body::before {
   display: flex;
   gap: 16px;
   padding: 12px 16px;
-  background: rgba(0, 240, 200, 0.03);
+  background: rgba(0, 184, 148, 0.03);
   border-radius: 8px;
   margin-top: 12px;
   font-family: var(--font-mono);
@@ -406,17 +405,17 @@ body::before {
   background: white;
   padding: 24px;
   border-radius: var(--radius);
-  box-shadow: 0 0 40px rgba(0, 240, 200, 0.15), 0 0 80px rgba(0, 240, 200, 0.05);
+  box-shadow: 0 0 40px rgba(0, 184, 148, 0.12), 0 0 80px rgba(0, 184, 148, 0.04);
   animation: qrPulse 2s ease-in-out infinite;
 }
 
 .qr-wrapper.metadata {
-  box-shadow: 0 0 40px rgba(123, 63, 255, 0.2), 0 0 80px rgba(123, 63, 255, 0.08);
+  box-shadow: 0 0 40px rgba(108, 92, 231, 0.15), 0 0 80px rgba(108, 92, 231, 0.05);
 }
 
 @keyframes qrPulse {
-  0%, 100% { box-shadow: 0 0 40px rgba(0, 240, 200, 0.15); }
-  50% { box-shadow: 0 0 60px rgba(0, 240, 200, 0.25); }
+  0%, 100% { box-shadow: 0 0 40px rgba(0, 184, 148, 0.12); }
+  50% { box-shadow: 0 0 60px rgba(0, 184, 148, 0.2); }
 }
 
 .qr-wrapper img, .qr-wrapper canvas {
@@ -523,7 +522,7 @@ body::before {
   align-items: center;
   justify-content: center;
   gap: 12px;
-  background: rgba(8, 8, 15, 0.7);
+  background: rgba(245, 247, 250, 0.8);
   backdrop-filter: blur(4px);
 }
 
@@ -724,7 +723,7 @@ input[type="file"] { display: none; }
   align-items: center;
   gap: 24px;
   padding: 16px;
-  background: rgba(0, 240, 200, 0.02);
+  background: rgba(0, 184, 148, 0.03);
   border-radius: 8px;
   margin-top: 16px;
 }
@@ -745,9 +744,9 @@ input[type="file"] { display: none; }
 .download-area {
   margin-top: 16px;
   padding: 16px;
-  background: rgba(0, 240, 200, 0.03);
+  background: rgba(0, 184, 148, 0.04);
   border-radius: 8px;
-  border: 1px solid rgba(0, 240, 200, 0.1);
+  border: 1px solid rgba(0, 184, 148, 0.12);
 }
 
 .download-area .title {
@@ -771,7 +770,7 @@ input[type="file"] { display: none; }
   align-items: center;
   justify-content: space-between;
   padding: 8px 12px;
-  background: rgba(0, 240, 200, 0.02);
+  background: rgba(0, 184, 148, 0.03);
   border-radius: 6px;
   font-family: var(--font-mono);
   font-size: 12px;
@@ -913,10 +912,10 @@ input[type="file"] { display: none; }
           <button class="btn btn-sm btn-primary" id="encode-btn" disabled>编码并发送</button>
         </div>
 
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;padding:8px 12px;background:rgba(0,0,0,0.2);border-radius:6px;border:1px solid rgba(0,240,200,0.06);">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;padding:8px 12px;background:var(--bg-secondary);border-radius:6px;border:1px solid var(--gray);">
           <span style="font-family:var(--font-mono);font-size:11px;color:var(--text-dim);">🔐 密码</span>
-          <input type="password" id="sender-password" placeholder="留空则不加密" style="flex:1;background:var(--bg-secondary);border:1px solid rgba(0,240,200,0.1);border-radius:4px;padding:6px 10px;color:var(--text);font-family:var(--font-mono);font-size:12px;outline:none;"
-            onfocus="this.style.borderColor='var(--cyan)'" onblur="this.style.borderColor='rgba(0,240,200,0.1)'">
+          <input type="password" id="sender-password" placeholder="留空则不加密" style="flex:1;background:var(--bg-secondary);border:1px solid var(--gray);border-radius:4px;padding:6px 10px;color:var(--text);font-family:var(--font-mono);font-size:12px;outline:none;transition:border-color 0.2s;"
+            onfocus="this.style.borderColor='var(--cyan)'" onblur="this.style.borderColor='var(--gray)'">
           <button class="btn btn-icon" id="toggle-pw-btn" type="button" style="width:30px;height:30px;font-size:14px;padding:0;" onclick="const ip=document.getElementById('sender-password');ip.type=ip.type==='password'?'text':'password';this.textContent=ip.type==='password'?'👁':'👁‍🗨'">👁</button>
         </div>
 
@@ -988,10 +987,10 @@ input[type="file"] { display: none; }
             <button class="btn btn-sm" id="stop-camera-btn" disabled>■ 停止</button>
           </div>
         </div>
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;padding:8px 12px;background:rgba(0,0,0,0.2);border-radius:6px;border:1px solid rgba(0,240,200,0.06);">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;padding:8px 12px;background:var(--bg-secondary);border-radius:6px;border:1px solid var(--gray);">
           <span style="font-family:var(--font-mono);font-size:11px;color:var(--text-dim);">🔐 解密</span>
-          <input type="password" id="receiver-password" placeholder="与发送端密码一致" style="flex:1;background:var(--bg-secondary);border:1px solid rgba(0,240,200,0.1);border-radius:4px;padding:6px 10px;color:var(--text);font-family:var(--font-mono);font-size:12px;outline:none;"
-            onfocus="this.style.borderColor='var(--purple)'" onblur="this.style.borderColor='rgba(0,240,200,0.1)'">
+          <input type="password" id="receiver-password" placeholder="与发送端密码一致" style="flex:1;background:var(--bg-secondary);border:1px solid var(--gray);border-radius:4px;padding:6px 10px;color:var(--text);font-family:var(--font-mono);font-size:12px;outline:none;transition:border-color 0.2s;"
+            onfocus="this.style.borderColor='var(--purple)'" onblur="this.style.borderColor='var(--gray)'">
           <button class="btn btn-icon" type="button" style="width:30px;height:30px;font-size:14px;padding:0;" onclick="const ip=document.getElementById('receiver-password');ip.type=ip.type==='password'?'text':'password';this.textContent=ip.type==='password'?'👁':'👁‍🗨'">👁</button>
         </div>
 
