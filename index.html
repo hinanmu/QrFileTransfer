@@ -2010,14 +2010,22 @@ function decodeImageFile(file) {
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, w, h);
         URL.revokeObjectURL(img.src);
-        const reader = new ZXing.BrowserQRCodeReader();
-        reader.decodeFromCanvas(canvas).then(result => {
-          reader.reset();
+        const imageData = ctx.getImageData(0, 0, w, h);
+        const d = imageData.data;
+        const lum = new Uint8Array(w * h);
+        for (let i = 0; i < w * h; i++) {
+          lum[i] = (d[i * 4] * 77 + d[i * 4 + 1] * 150 + d[i * 4 + 2] * 29 + 128) >> 8;
+        }
+        const source = new ZXing.RGBLuminanceSource(w, h, lum);
+        const binarizer = new ZXing.HybridBinarizer(source);
+        const bitmap = new ZXing.BinaryBitmap(binarizer);
+        const reader = new ZXing.MultiFormatReader();
+        try {
+          const result = reader.decode(bitmap);
           if (!resolved) { resolved = true; clearTimeout(timer); resolve(result.getText()); }
-        }).catch(() => {
-          reader.reset();
+        } catch (e) {
           if (!resolved) { resolved = true; clearTimeout(timer); resolve(null); }
-        });
+        }
       } catch (e) {
         if (!resolved) { resolved = true; clearTimeout(timer); resolve(null); }
       }
@@ -2407,10 +2415,17 @@ function addScanLog(tag, msg, type = 'success') {
 }
 
 function resetReceiverState() {
+  reconstructedFiles.forEach(file => URL.revokeObjectURL(file.url));
+  reconstructedFiles = [];
   receivedChunks = new Map();
   receivedMeta = null;
   receivedFiles = new Map();
   totalExpectedChunks = 0;
+  transferEndFileCount = null;
+  hasReconstructed = false;
+  lastMissingCount = null;
+  metaReceived = false;
+  endReceived = false;
   receiverProgress.style.display = 'none';
   downloadArea.style.display = 'none';
   downloadList.innerHTML = '';
