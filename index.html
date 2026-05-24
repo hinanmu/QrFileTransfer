@@ -1025,19 +1025,12 @@ input[type="file"] { display: none; }
               <span style="flex:1;"></span>
               <input type="file" id="image-input" accept="image/*" multiple hidden>
               <button class="btn btn-sm" id="add-images-btn">📁 添加图片</button>
-              <button class="btn btn-sm btn-purple" id="decode-all-btn">▶ 解码全部</button>
               <button class="btn btn-sm" id="export-btn" disabled>💾 导出</button>
             </div>
             <div id="image-thumbs" style="display:flex;gap:4px;overflow-x:auto;padding:8px 0;min-height:60px;margin-top:4px;border-radius:8px;background:var(--bg-secondary);border:1px dashed var(--gray-light);">
               <div style="width:100%;text-align:center;color:var(--text-dim);font-family:var(--font-mono);font-size:12px;padding:14px 0;">
                 启动摄像头自动截图 或 点击"添加图片"选择本地图片
               </div>
-            </div>
-            <div id="decode-progress" style="display:none;align-items:center;gap:12px;font-family:var(--font-mono);font-size:12px;color:var(--text-dim);margin-top:8px;">
-              <div style="flex:1;height:4px;background:var(--gray);border-radius:2px;overflow:hidden;">
-                <div id="decode-progress-fill" style="height:100%;width:0%;background:linear-gradient(90deg,var(--purple),var(--pink));border-radius:2px;transition:width 0.3s;"></div>
-              </div>
-              <span id="decode-progress-text">0/0</span>
             </div>
           </div>
 
@@ -1061,7 +1054,10 @@ input[type="file"] { display: none; }
           </div>
 
           <div id="download-area" class="download-area" style="display:none;">
-            <div class="title">✓ 传输完成 - 点击下载</div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+              <div class="title" style="margin-bottom:0;">✓ 传输完成</div>
+              <button class="btn btn-sm" id="export-folder-btn" style="border-color:var(--cyan);color:var(--cyan);">📁 导出到文件夹</button>
+            </div>
             <div class="download-list" id="download-list"></div>
           </div>
         </div>
@@ -1090,6 +1086,10 @@ input[type="file"] { display: none; }
     </div>
   </section>
 </main>
+
+<div id="image-lightbox" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,0.85);cursor:zoom-out;" onclick="closeImagePreview()">
+  <img id="lightbox-img" style="max-width:90vw;max-height:90vh;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);border-radius:8px;box-shadow:0 0 40px rgba(0,0,0,0.5);">
+</div>
 
 <canvas id="capture-canvas" style="display:none;"></canvas>
 
@@ -1137,10 +1137,12 @@ let transferEndFileCount = null;
 let hasReconstructed = false;
 let lastMissingCount = null;
 let duplicateLogCache = new Map();
+let reconstructedFiles = [];
+let metaReceived = false;
+let endReceived = false;
 
 // Image batch decode state
 let imageFiles = [];
-let isBatchDecoding = false;
 
 // Camera frame capture state
 let frameCaptureCount = 0;
@@ -1190,13 +1192,10 @@ const downloadArea = $('download-area');
 const downloadList = $('download-list');
 const imageInput = $('image-input');
 const addImagesBtn = $('add-images-btn');
-const decodeAllBtn = $('decode-all-btn');
 const exportBtn = $('export-btn');
 const imageThumbs = $('image-thumbs');
 const imageCount = $('image-count');
-const decodeProgress = $('decode-progress');
-const decodeProgressFill = $('decode-progress-fill');
-const decodeProgressText = $('decode-progress-text');
+const exportFolderBtn = $('export-folder-btn');
 
 const circumference = 2 * Math.PI * 34;
 
@@ -1760,6 +1759,30 @@ playBtn.addEventListener('click', () => {
   else startPlayback();
 });
 
+let isDraggingProgress = false;
+progressBar.addEventListener('mousedown', e => {
+  if (!qrCodeData.length) return;
+  isDraggingProgress = true;
+  const rect = progressBar.getBoundingClientRect();
+  const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  const idx = Math.round(pct * (qrCodeData.length - 1));
+  currentIndex = idx;
+  showQRCode(currentIndex);
+  updateCarouselControls();
+});
+document.addEventListener('mousemove', e => {
+  if (!isDraggingProgress || !qrCodeData.length) return;
+  const rect = progressBar.getBoundingClientRect();
+  const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  const idx = Math.round(pct * (qrCodeData.length - 1));
+  currentIndex = idx;
+  showQRCode(currentIndex);
+  updateCarouselControls();
+});
+document.addEventListener('mouseup', () => {
+  isDraggingProgress = false;
+});
+
 function startPlayback() {
   if (!qrCodeData.length || isPlaying) return;
   isPlaying = true;
@@ -1813,6 +1836,7 @@ document.addEventListener('keydown', e => {
   if (e.key === 'ArrowLeft') { prevBtn.click(); e.preventDefault(); }
   if (e.key === 'ArrowRight') { nextBtn.click(); e.preventDefault(); }
   if (e.key === ' ') { playBtn.click(); e.preventDefault(); }
+  if (e.key === 'Escape') closeImagePreview();
 });
 
 // ============================================================
@@ -1824,8 +1848,8 @@ startCameraBtn.addEventListener('click', startCamera);
 stopCameraBtn.addEventListener('click', stopCamera);
 restartBtn.addEventListener('click', restartReceiver);
 addImagesBtn.addEventListener('click', () => imageInput.click());
-decodeAllBtn.addEventListener('click', decodeAllImages);
 exportBtn.addEventListener('click', exportImages);
+exportFolderBtn.addEventListener('click', exportToFolder);
 
 imageInput.addEventListener('change', e => {
   const userFiles = Array.from(e.target.files || []);
@@ -1850,7 +1874,9 @@ async function startCamera() {
     startCameraBtn.disabled = true;
     stopCameraBtn.disabled = false;
     restartBtn.disabled = false;
+    scanCounter = 0;
     scanStartTime = Date.now();
+    duplicateLogCache = new Map();
     clearScanLog();
     addScanLog('系统', `摄像头已启动 ${cameraVideo.videoWidth}×${cameraVideo.videoHeight}，正在截图...`, 'meta');
     resetReceiverState();
@@ -1860,7 +1886,8 @@ async function startCamera() {
   }
 }
 
-function stopCamera() {
+function stopCamera(options = {}) {
+  const keepRestart = Boolean(options.keepRestart);
   stopScanning();
   if (mediaStream) {
     mediaStream.getTracks().forEach(t => t.stop());
@@ -1871,7 +1898,7 @@ function stopCamera() {
   scanline.style.display = 'none';
   startCameraBtn.disabled = false;
   stopCameraBtn.disabled = true;
-  restartBtn.disabled = true;
+  restartBtn.disabled = !keepRestart;
 }
 
 function restartReceiver() {
@@ -1884,7 +1911,9 @@ function restartReceiver() {
   lastMissingCount = null;
   duplicateLogCache = new Map();
   frameCaptureCount = 0;
-  imageFiles = imageFiles.filter(f => !f.name.startsWith('qr_frame_'));
+  const removedFrames = imageFiles.filter(isCameraFrame);
+  revokeObjectUrls(imagePreviewObjectUrls, removedFrames);
+  imageFiles = imageFiles.filter(f => !isCameraFrame(f));
   resetReceiverState();
   clearScanLog();
   updateImageGallery();
@@ -1900,7 +1929,8 @@ function restartReceiver() {
 function startScanning() {
   if (isScanning) return;
   isScanning = true;
-  scanTimer = setInterval(captureAndDecode, 500);
+  captureAndDecode();
+  scanTimer = setInterval(captureAndDecode, CAPTURE_INTERVAL_MS);
 }
 
 function stopScanning() {
@@ -1909,96 +1939,85 @@ function stopScanning() {
 }
 
 // ---- Frame Capture + Decode ----
-function captureAndDecode() {
+async function captureAndDecode() {
   if (!isScanning || cameraVideo.readyState < 2 || isDecoding) return;
   isDecoding = true;
+  try {
+    const file = await captureCameraFrameFile();
+    if (!file) return;
+    imageFiles.push(file);
+    updateImageGallery();
+    const result = await decodeImageFile(file);
+    if (result) {
+      processRawData(result);
+    }
+  } finally {
+    isDecoding = false;
+  }
+}
+
+function captureCameraFrameFile() {
   const c = document.createElement('canvas');
   c.width = cameraVideo.videoWidth || 640;
   c.height = cameraVideo.videoHeight || 480;
-  c.getContext('2d').drawImage(cameraVideo, 0, 0, c.width, c.height);
-  const blob = c.toDataURL('image/png');
-  const byteString = atob(blob.split(',')[1]);
-  const ab = new ArrayBuffer(byteString.length);
-  const ia = new Uint8Array(ab);
-  for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
-  const file = new File([ab], `qr_frame_${String(frameCaptureCount).padStart(4, '0')}.png`, { type: 'image/png' });
-  frameCaptureCount++;
-  imageFiles.push(file);
-  updateImageGallery();
-  decodeImageFile(file).then(result => {
-    isDecoding = false;
-    if (result) {
-      processRawData(result);
-      flashDecode('success');
-    }
+  const ctx = c.getContext('2d');
+  if (!ctx) return Promise.resolve(null);
+  ctx.drawImage(cameraVideo, 0, 0, c.width, c.height);
+
+  return new Promise(resolve => {
+    c.toBlob(blob => {
+      if (!blob) {
+        resolve(null);
+        return;
+      }
+      const file = new File([blob], `${FRAME_FILE_PREFIX}${String(frameCaptureCount).padStart(4, '0')}.png`, { type: 'image/png' });
+      frameCaptureCount++;
+      resolve(file);
+    }, 'image/png');
   });
+}
+
+function showImagePreview(file) {
+  const img = document.getElementById('lightbox-img');
+  const lightbox = document.getElementById('image-lightbox');
+  img.src = URL.createObjectURL(file);
+  lightbox.style.display = 'block';
+}
+function closeImagePreview() {
+  const img = document.getElementById('lightbox-img');
+  const lightbox = document.getElementById('image-lightbox');
+  if (img.src) URL.revokeObjectURL(img.src);
+  img.src = '';
+  lightbox.style.display = 'none';
 }
 
 function updateImageGallery() {
   const total = imageFiles.length;
   imageCount.textContent = total;
-  decodeAllBtn.disabled = total === 0 || isBatchDecoding;
-  exportBtn.disabled = total === 0;
+  exportBtn.disabled = imageFiles.every(f => !isCameraFrame(f));
 
   if (total === 0) {
+    revokeObjectUrls(imagePreviewObjectUrls);
     imageThumbs.innerHTML = `<div style="width:100%;text-align:center;color:var(--text-dim);font-family:var(--font-mono);font-size:12px;padding:14px 0;">
       启动摄像头自动截图 或 点击"添加图片"选择本地图片
     </div>`;
     return;
   }
   const start = Math.max(0, total - 200);
+  const visibleFiles = imageFiles.slice(start);
+  pruneObjectUrls(imagePreviewObjectUrls, visibleFiles);
   let html = '';
   for (let i = start; i < total; i++) {
     const f = imageFiles[i];
-    const isCam = f.name.startsWith('qr_frame_');
-    html += `<div style="position:relative;width:50px;height:50px;border-radius:4px;overflow:hidden;border:1px solid ${isCam ? 'var(--purple)' : 'var(--gray)'};flex-shrink:0;" title="${f.name}">
-      <img src="${URL.createObjectURL(f)}" style="width:100%;height:100%;object-fit:cover;">
+    const isCam = isCameraFrame(f);
+    const thumbUrl = getObjectUrl(imagePreviewObjectUrls, f);
+    html += `<div style="position:relative;width:50px;height:50px;border-radius:4px;overflow:hidden;border:1px solid ${isCam ? 'var(--purple)' : 'var(--gray)'};flex-shrink:0;cursor:pointer;" title="${escapeHtml(f.name)}" onclick="showImagePreview(imageFiles[${i}])">
+      <img src="${thumbUrl}" style="width:100%;height:100%;object-fit:cover;">
       <span style="position:absolute;bottom:0;right:0;background:rgba(0,0,0,0.6);color:#fff;font-size:8px;padding:0 2px;border-radius:2px 0 0 0;font-family:var(--font-mono);">${i+1}</span>
     </div>`;
   }
   imageThumbs.innerHTML = html;
   imageThumbs.scrollLeft = imageThumbs.scrollWidth;
-}
-
-// ---- Decode All Images ----
-async function decodeAllImages() {
-  const images = imageFiles;
-  if (isBatchDecoding || images.length === 0) return;
-  isBatchDecoding = true;
-  decodeAllBtn.disabled = true;
-  decodeAllBtn.textContent = '⏳ 解码中...';
-  decodeProgress.style.display = 'flex';
-  resetReceiverState();
-  clearScanLog();
-  addScanLog('系统', `开始解码 ${images.length} 张图片...`, 'meta');
-
-  let decoded = 0;
-  let failed = 0;
-
-  for (let i = 0; i < images.length; i++) {
-    const file = images[i];
-    decodeProgressFill.style.width = `${(i / images.length) * 100}%`;
-    decodeProgressText.textContent = `${i + 1}/${images.length}`;
-
-    try {
-      const result = await decodeImageFile(file);
-      if (result) {
-        decoded++;
-        processRawData(result);
-      } else {
-        failed++;
-      }
-    } catch (err) {
-      failed++;
-    }
-  }
-
-  decodeProgressFill.style.width = '100%';
-  decodeProgressText.textContent = `${images.length}/${images.length}`;
-  decodeAllBtn.textContent = '▶ 解码全部';
-  decodeAllBtn.disabled = false;
-  isBatchDecoding = false;
-  addScanLog('系统', `解码完成：成功 ${decoded} 张，失败 ${failed} 张${failed > 0 ? '（可尝试切换密码后重新解码）' : ''}`, decoded > 0 ? 'success' : 'end');
 }
 
 function decodeImageFile(file) {
@@ -2083,9 +2102,11 @@ function parseMetaData(bytes) {
     files.push({ path, fileSize, totalChunks, data: new Array(totalChunks), received: 0 });
     totalExpectedChunks += totalChunks;
   }
+  totalExpectedChunks += 2; // +元数据(0x02) + 传输结束(0x03)
   receivedMeta = { files };
   receivedFiles = new Map();
   files.forEach((f, i) => receivedFiles.set(i, f));
+  metaReceived = true;
   rcvFiles.textContent = files.length;
   rcvTotal.textContent = totalExpectedChunks;
   rcvStatus.textContent = '接收中';
@@ -2117,7 +2138,7 @@ function parseFileData(bytes) {
     file.received = (file.received || 0) + 1;
   }
 
-  rcvChunks.textContent = receivedChunks.size;
+  rcvChunks.textContent = getReceivedCount();
   flashDecode('success');
   const shortPath = path.length > 40 ? '...' + path.slice(-37) : path;
   const fileSize = file ? formatSize(file.fileSize) : '?';
@@ -2128,6 +2149,7 @@ function parseFileData(bytes) {
 
 function onTransferEnd(bytes) {
   if (!receivedMeta) return;
+  endReceived = true;
   addScanLog('完成', '传输结束标记已接收，开始重组文件...', 'end');
   flashDecode('success');
   stopScanning();
@@ -2136,13 +2158,17 @@ function onTransferEnd(bytes) {
   reconstructFiles();
 }
 
+function getReceivedCount() {
+  return receivedChunks.size + (metaReceived ? 1 : 0) + (endReceived ? 1 : 0);
+}
+
 function flashDecode(type) {
   decodeFlash.className = 'decode-flash ' + type;
   setTimeout(() => { decodeFlash.className = 'decode-flash'; }, 150);
 }
 
 function updateProgressRing() {
-  const received = receivedChunks.size;
+  const received = getReceivedCount();
   const total = totalExpectedChunks;
   if (total === 0) return;
   const pct = Math.min(100, Math.round((received / total) * 100));
@@ -2225,6 +2251,7 @@ function reconstructFiles() {
 }
 
 function addDownloadItem(path, url, size) {
+  reconstructedFiles.push({ path, url, size });
   const name = path.split('/').pop() || path;
   const div = document.createElement('div');
   div.className = 'download-item';
@@ -2234,6 +2261,31 @@ function addDownloadItem(path, url, size) {
     <a class="dlink" href="${url}" download="${name}">下载</a>
   `;
   downloadList.appendChild(div);
+}
+
+async function exportToFolder() {
+  if (!reconstructedFiles.length) return;
+  try {
+    const dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+    for (const { path, url, size } of reconstructedFiles) {
+      const parts = path.split('/');
+      const fileName = parts.pop();
+      let currentDir = dirHandle;
+      for (const part of parts) {
+        currentDir = await currentDir.getDirectoryHandle(part, { create: true });
+      }
+      const fileHandle = await currentDir.getFileHandle(fileName, { create: true });
+      const writable = await fileHandle.createWritable();
+      const response = await fetch(url);
+      await writable.write(await response.blob());
+      await writable.close();
+    }
+    addScanLog('系统', `已导出 ${reconstructedFiles.length} 个文件到文件夹`, 'success');
+  } catch (err) {
+    if (err.name !== 'AbortError' && err.name !== 'SecurityError') {
+      addScanLog('错误', '导出失败: ' + err.message, 'end');
+    }
+  }
 }
 
 // ---- Scan Log ----
@@ -2248,8 +2300,8 @@ function addScanLog(tag, msg, type = 'success') {
 
   let detail = '';
   if (receivedMeta && type !== 'meta' && type !== 'end') {
-    const pct = totalExpectedChunks > 0 ? Math.round((receivedChunks.size / totalExpectedChunks) * 100) : 0;
-    detail = ` [#${receivedChunks.size}/${totalExpectedChunks} ${pct}%]`;
+    const pct = totalExpectedChunks > 0 ? Math.round((getReceivedCount() / totalExpectedChunks) * 100) : 0;
+    detail = ` [#${getReceivedCount()}/${totalExpectedChunks} ${pct}%]`;
   }
   if (scanCounter > 0 && type !== 'meta') {
     detail += ` 帧#${scanCounter}`;
@@ -2286,6 +2338,9 @@ function resetReceiverState() {
   rcvTotal.textContent = '0';
   rcvFiles.textContent = '0';
   rcvStatus.textContent = '等待中';
+  metaReceived = false;
+  endReceived = false;
+  reconstructedFiles = [];
 }
 
 // ---- Init ----
