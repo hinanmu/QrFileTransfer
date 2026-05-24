@@ -957,7 +957,7 @@ input[type="file"] { display: none; }
           <div class="qr-placeholder">
             <div class="big-icon">◈</div>
             <div>选择文件并点击"编码并发送"</div>
-            <div style="font-size:12px;color:var(--text-dim);">每个 QR 码携带约 2.5KB 数据</div>
+            <div style="font-size:12px;color:var(--text-dim);">每个 QR 码携带约 1.4KB 数据</div>
             <div style="font-size:11px;color:var(--text-dim);margin-top:4px;">可设置密码加密传输</div>
           </div>
         </div>
@@ -1104,7 +1104,7 @@ input[type="file"] { display: none; }
 // ============================================================
 
 // ---- Constants ----
-const CHUNK_DATA_SIZE = 2100;
+const CHUNK_DATA_SIZE = 1470;
 const PACKET_TYPE = {
   META_DATA:    0x02,
   FILE_DATA:    0x01,
@@ -1614,7 +1614,7 @@ function showQRCode(index) {
     qrDisplayArea.innerHTML = `<div class="qr-placeholder">
       <div class="big-icon">◈</div>
       <div>选择文件并点击"编码并发送"</div>
-      <div style="font-size:12px;color:var(--text-dim);">每个 QR 码携带约 2.0KB 数据</div>
+      <div style="font-size:12px;color:var(--text-dim);">每个 QR 码携带约 1.4KB 数据</div>
     </div>`;
     return;
   }
