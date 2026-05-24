@@ -1194,49 +1194,6 @@ function getReceiverPassword() {
   return document.getElementById('receiver-password').value;
 }
 
-// ---- GZip Compression ----
-const HAS_COMPRESSION = typeof CompressionStream !== 'undefined';
-
-async function compressData(uint8Data) {
-  if (!HAS_COMPRESSION) return uint8Data;
-  const cs = new CompressionStream('gzip');
-  const writer = cs.writable.getWriter();
-  await writer.write(uint8Data);
-  await writer.close();
-  const reader = cs.readable.getReader();
-  const chunks = [];
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    if (value) chunks.push(value);
-  }
-  const total = chunks.reduce((s, c) => s + c.length, 0);
-  const result = new Uint8Array(total);
-  let off = 0;
-  for (const c of chunks) { result.set(c, off); off += c.length; }
-  return result;
-}
-
-async function decompressData(uint8Data) {
-  if (!HAS_COMPRESSION) return uint8Data;
-  const ds = new DecompressionStream('gzip');
-  const writer = ds.writable.getWriter();
-  await writer.write(uint8Data);
-  await writer.close();
-  const reader = ds.readable.getReader();
-  const chunks = [];
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    if (value) chunks.push(value);
-  }
-  const total = chunks.reduce((s, c) => s + c.length, 0);
-  const result = new Uint8Array(total);
-  let off = 0;
-  for (const c of chunks) { result.set(c, off); off += c.length; }
-  return result;
-}
-
 // ---- Mode Switching ----
 modeBtns.forEach(btn => {
   btn.addEventListener('click', () => switchMode(btn.dataset.mode));
@@ -1359,6 +1316,7 @@ async function startEncoding() {
     const totalPacketsAll = packetCounts.reduce((a, b) => a + b, 0) + 2;
     let encodedSoFar = 0;
 
+    setProgress('编码文件数据...');
     for (const entry of fileEntries) {
       const arrayBuf = await entry.file.arrayBuffer();
       const fileData = new Uint8Array(arrayBuf);
@@ -1383,10 +1341,9 @@ async function startEncoding() {
         packet.set(chunkData, off);
 
         const encrypted = xorEncrypt(packet, getSenderPassword());
-        const compressed = await compressData(encrypted);
         qrCodeData.push({
           type: 'data',
-          rawData: compressed,
+          rawData: encrypted,
           label: `[${globalFileIdx}] ${entry.path} (${chunkIdx + 1}/${totalChunks})`,
           fileIdx: globalFileIdx,
           chunkIdx
@@ -1743,17 +1700,11 @@ function scanLoop() {
   scanInterval = requestAnimationFrame(scanLoop);
 }
 
-async function processRawData(raw) {
+function processRawData(raw) {
   try {
     const bytes = base64ToUint8(raw);
     if (bytes.length < 1) return;
-    const decrypted = xorEncrypt(bytes, getReceiverPassword());
-    let data;
-    if (decrypted[0] === PACKET_TYPE.FILE_DATA) {
-      data = await decompressData(decrypted);
-    } else {
-      data = decrypted;
-    }
+    const data = xorEncrypt(bytes, getReceiverPassword());
     const type = data[0];
 
     if (type === PACKET_TYPE.META_DATA) {
