@@ -2016,11 +2016,13 @@ function updateImageGallery() {
 }
 
 function decodeImageFile(file) {
+  console.log('[decodeImageFile] start', file.name, file.size);
   return new Promise((resolve) => {
     const img = new Image();
     let resolved = false;
-    const timer = setTimeout(() => { if (!resolved) { resolved = true; resolve(null); } }, 10000);
+    const timer = setTimeout(() => { console.warn('[decodeImageFile] TIMEOUT 10s'); if (!resolved) { resolved = true; resolve(null); } }, 10000);
     img.onload = () => {
+      console.log('[decodeImageFile] img.onload', img.naturalWidth, 'x', img.naturalHeight);
       try {
         const canvas = document.createElement('canvas');
         const maxDim = 1200;
@@ -2037,24 +2039,34 @@ function decodeImageFile(file) {
         ctx.drawImage(img, 0, 0, w, h);
         URL.revokeObjectURL(img.src);
         const imageData = ctx.getImageData(0, 0, w, h);
+        console.log('[decodeImageFile] canvas', w, 'x', h, 'imageData len', imageData.data.length);
+        console.log('[decodeImageFile] ZXing.RGBLuminanceSource exists:', typeof ZXing.RGBLuminanceSource);
         const source = new ZXing.RGBLuminanceSource(imageData.data, w, h);
+        console.log('[decodeImageFile] RGBLuminanceSource created');
         const binarizer = new ZXing.HybridBinarizer(source);
+        console.log('[decodeImageFile] HybridBinarizer created');
         const bitmap = new ZXing.BinaryBitmap(binarizer);
+        console.log('[decodeImageFile] BinaryBitmap created');
         const reader = new ZXing.MultiFormatReader();
         const hints = new Map();
         hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.QR_CODE]);
         hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+        console.log('[decodeImageFile] starting reader.decode...');
         try {
           const result = reader.decode(bitmap, hints);
+          console.log('[decodeImageFile] decode SUCCESS:', result.getText().substring(0, 80));
           if (!resolved) { resolved = true; clearTimeout(timer); resolve(result.getText()); }
         } catch (e) {
+          console.log('[decodeImageFile] decode FAILED:', e.name || 'Error', '-', (e.message || '').substring(0, 100));
           if (!resolved) { resolved = true; clearTimeout(timer); resolve(null); }
         }
       } catch (e) {
+        console.error('[decodeImageFile] EXCEPTION:', e.name, '-', (e.message || '').substring(0, 200));
         if (!resolved) { resolved = true; clearTimeout(timer); resolve(null); }
       }
     };
     img.onerror = () => {
+      console.warn('[decodeImageFile] img.onerror');
       URL.revokeObjectURL(img.src);
       if (!resolved) { resolved = true; clearTimeout(timer); resolve(null); }
     };
@@ -2369,7 +2381,7 @@ function reconstructFiles() {
 
 function addDownloadItem(path, url, size) {
   reconstructedFiles.push({ path, url, size });
-  const name = path.split('/').pop() || path;
+  const name = safePathParts(path).pop();
   const div = document.createElement('div');
   div.className = 'download-item';
   div.innerHTML = `
@@ -2384,8 +2396,8 @@ async function exportToFolder() {
   if (!reconstructedFiles.length) return;
   try {
     const dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
-    for (const { path, url, size } of reconstructedFiles) {
-      const parts = path.split('/');
+    for (const { path, url } of reconstructedFiles) {
+      const parts = safePathParts(path);
       const fileName = parts.pop();
       let currentDir = dirHandle;
       for (const part of parts) {
@@ -2430,7 +2442,7 @@ function addScanLog(tag, msg, type = 'success') {
 
   entry.innerHTML = `
     <span class="dot ${type}"></span>
-    <span class="msg"><strong>${tag}</strong> ${msg}${detail}</span>
+    <span class="msg"><strong>${escapeHtml(tag)}</strong> ${escapeHtml(msg)}${escapeHtml(detail)}</span>
     <span class="time">${formatTime()}</span>
   `;
   if (scanLog.querySelector('.file-empty')) {
