@@ -1320,8 +1320,8 @@ modeBtns.forEach(btn => {
   btn.addEventListener('click', () => switchMode(btn.dataset.mode));
 });
 
-function switchMode(mode) {
-  if (mode === currentMode) return;
+function switchMode(mode, force) {
+  if (!force && mode === currentMode) return;
   currentMode = mode;
   modeBtns.forEach(b => {
     b.classList.toggle('active', b.dataset.mode === mode);
@@ -2313,7 +2313,7 @@ if (typeof jsQR === 'undefined') {
   showError('jsQR 库加载失败，请检查网络连接');
 }
 
-switchMode(currentMode);
+switchMode(currentMode, true);
 
 function showError(msg) {
   const container = document.querySelector('.main');
