@@ -1087,6 +1087,59 @@ const DUPLICATE_LOG_INTERVAL_MS = 1200;
 const FRAME_FILE_PREFIX = 'qr_frame_';
 const MAX_FILE_COUNT = 10000;
 const MAX_PATH_BYTES = 4096;
+
+// ---- Compression Helpers ----
+async function compressData(uint8Array) {
+  if (typeof CompressionStream === 'undefined') return uint8Array;
+  const cs = new CompressionStream('gzip');
+  const writer = cs.writable.getWriter();
+  writer.write(uint8Array);
+  writer.close();
+  const reader = cs.readable.getReader();
+  const chunks = [];
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+  }
+  const totalLen = chunks.reduce((s, c) => s + c.length, 0);
+  if (totalLen >= uint8Array.length) return uint8Array;
+  const result = new Uint8Array(totalLen);
+  let off = 0;
+  for (const chunk of chunks) {
+    result.set(chunk, off);
+    off += chunk.length;
+  }
+  return result;
+}
+
+async function decompressData(uint8Array) {
+  if (typeof DecompressionStream === 'undefined') return uint8Array;
+  if (uint8Array.length < 2 || uint8Array[0] !== 0x1f || uint8Array[1] !== 0x8b) return uint8Array;
+  try {
+    const ds = new DecompressionStream('gzip');
+    const writer = ds.writable.getWriter();
+    writer.write(uint8Array);
+    writer.close();
+    const reader = ds.readable.getReader();
+    const chunks = [];
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+    }
+    const totalLen = chunks.reduce((s, c) => s + c.length, 0);
+    const result = new Uint8Array(totalLen);
+    let off = 0;
+    for (const chunk of chunks) {
+      result.set(chunk, off);
+      off += chunk.length;
+    }
+    return result;
+  } catch (e) {
+    return uint8Array;
+  }
+}
 const MAX_CHUNKS_PER_FILE = 200000;
 const PACKET_TYPE = {
   META_DATA:    0x02,
@@ -1466,23 +1519,32 @@ async function startEncoding() {
   };
 
   try {
+    // Step 0: Compress all files
+    setProgress('压缩文件...');
+    const compressedDataArray = [];
+    for (const entry of fileEntries) {
+      const arrayBuf = await entry.file.arrayBuffer();
+      const originalData = new Uint8Array(arrayBuf);
+      const compressed = await compressData(originalData);
+      compressedDataArray.push(compressed);
+    }
+
     // Step 1: Build metadata
     setProgress('构建元数据...');
-    const metaData = buildMetadata();
+    const metaData = buildMetadata(compressedDataArray);
     const metaEncrypted = xorEncrypt(metaData, getSenderPassword());
     qrCodeData.push({ type: 'metadata', rawData: metaEncrypted, label: '元数据 (文件清单)' });
 
     // Step 2: Encode each file
     let globalFileIdx = 0;
     let totalPackets = 0;
-    const packetCounts = fileEntries.map(e => Math.ceil(e.file.size / CHUNK_DATA_SIZE));
+    const packetCounts = compressedDataArray.map(data => Math.ceil(data.length / CHUNK_DATA_SIZE));
     const totalPacketsAll = packetCounts.reduce((a, b) => a + b, 0) + 2;
     let encodedSoFar = 0;
 
     setProgress('编码文件数据...');
     for (const entry of fileEntries) {
-      const arrayBuf = await entry.file.arrayBuffer();
-      const fileData = new Uint8Array(arrayBuf);
+      const fileData = compressedDataArray[globalFileIdx];
       const totalChunks = Math.ceil(fileData.length / CHUNK_DATA_SIZE);
       const pathBytes = strToUint8(entry.path);
 
@@ -1595,10 +1657,10 @@ function prefetchNext(fromIndex) {
   doPrefetch();
 }
 
-function buildMetadata() {
+function buildMetadata(compressedDataArray) {
   const pathEntries = fileEntries.map(e => strToUint8(e.path));
   const totalPathsLen = pathEntries.reduce((s, p) => s + 2 + p.length + 8 + 4, 0);
-  const buf = new Uint8Array(1 + 4 + totalPathsLen);
+  const buf = new Uint8Array(1 + 4 + totalPathsLen + 1);
   let off = 0;
   buf[off++] = PACKET_TYPE.META_DATA;
   writeUint32BE(buf, off, fileEntries.length); off += 4;
@@ -1606,16 +1668,17 @@ function buildMetadata() {
   for (let i = 0; i < fileEntries.length; i++) {
     const pathBytes = pathEntries[i];
     const fileSize = fileEntries[i].file.size;
-    const totalChunks = Math.ceil(fileSize / CHUNK_DATA_SIZE);
+    const dataLen = compressedDataArray ? compressedDataArray[i].length : fileSize;
+    const totalChunks = Math.ceil(dataLen / CHUNK_DATA_SIZE);
     writeUint16BE(buf, off, pathBytes.length); off += 2;
     buf.set(pathBytes, off); off += pathBytes.length;
-    // 8 bytes for file size (uint64)
     const hi = Math.floor(fileSize / 0x100000000);
     const lo = fileSize >>> 0;
     writeUint32BE(buf, off, hi); off += 4;
     writeUint32BE(buf, off, lo); off += 4;
     writeUint32BE(buf, off, totalChunks); off += 4;
   }
+  buf[off] = compressedDataArray ? 1 : 0;
   return buf;
 }
 
@@ -2134,6 +2197,8 @@ function parseMetaData(bytes) {
     expectedDataChunks += totalChunks;
   }
 
+  const compressed = off < bytes.length && (bytes[off] & 1) !== 0;
+
   const mergedChunks = new Map();
   for (const [key, data] of receivedChunks.entries()) {
     const [fileIdx, chunkIdx] = key.split('-').map(Number);
@@ -2144,7 +2209,7 @@ function parseMetaData(bytes) {
     mergedChunks.set(key, data);
   }
 
-  receivedMeta = { files };
+  receivedMeta = { files, compressed };
   receivedFiles = new Map();
   files.forEach((f, i) => receivedFiles.set(i, f));
   receivedChunks = mergedChunks;
@@ -2351,10 +2416,10 @@ function updateMissingChunksList() {
 }
 
 // ---- File Reconstruction ----
-function reconstructFiles() {
+async function reconstructFiles() {
   let reconstructed = 0;
 
-  receivedFiles.forEach((file, idx) => {
+  for (const [idx, file] of receivedFiles.entries()) {
     const allChunks = [];
     let hasAll = true;
     for (let i = 0; i < file.totalChunks; i++) {
@@ -2367,11 +2432,22 @@ function reconstructFiles() {
     }
     if (hasAll) {
       const blob = new Blob(allChunks, { type: 'application/octet-stream' });
-      const url = URL.createObjectURL(blob);
+      let finalBlob = blob;
+      if (receivedMeta && receivedMeta.compressed) {
+        try {
+          const arrayBuf = await blob.arrayBuffer();
+          const decompressed = await decompressData(new Uint8Array(arrayBuf));
+          finalBlob = new Blob([decompressed], { type: 'application/octet-stream' });
+        } catch (e) {
+          addScanLog('错误', `解压失败 ${file.path}: ${e.message}`, 'end');
+          continue;
+        }
+      }
+      const url = URL.createObjectURL(finalBlob);
       reconstructed++;
-      addDownloadItem(file.path, url, blob.size);
+      addDownloadItem(file.path, url, finalBlob.size);
     }
-  });
+  }
 
   rcvStatus.textContent = '完成 ✓';
   progressRingFg.style.stroke = '#00f0c8';
