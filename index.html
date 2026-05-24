@@ -1266,6 +1266,15 @@ function pruneObjectUrls(cache, keepFiles) {
   }
 }
 
+function safePathParts(path) {
+  const parts = String(path)
+    .split('/')
+    .map(part => part.trim())
+    .filter(part => part && part !== '.' && part !== '..')
+    .map(part => part.replace(/[\\:*?"<>|]/g, '_'));
+  return parts.length ? parts : ['download.bin'];
+}
+
 function logOncePer(key, intervalMs, tag, msg, type = 'meta') {
   const now = Date.now();
   const last = duplicateLogCache.get(key) || 0;
@@ -1825,11 +1834,28 @@ imageInput.addEventListener('change', e => {
   for (const f of userFiles) {
     imageFiles.push(f);
   }
+  e.target.value = '';
   updateImageGallery();
   if (userFiles.length > 0) {
     addScanLog('系统', `添加了 ${userFiles.length} 张本地图片`, 'meta');
+    decodeImageFiles(userFiles);
   }
 });
+
+async function decodeImageFiles(filesToDecode) {
+  if (!filesToDecode.length) return;
+  let decoded = 0;
+  let failed = 0;
+  addImagesBtn.disabled = true;
+  for (let i = 0; i < filesToDecode.length; i++) {
+    const file = filesToDecode[i];
+    const result = await decodeImageFile(file);
+    if (result && processRawData(result)) decoded++;
+    else failed++;
+  }
+  addImagesBtn.disabled = false;
+  addScanLog('系统', `本地图片解码完成：有效 ${decoded} 张，未识别 ${failed} 张`, decoded > 0 ? 'success' : 'end');
+}
 
 async function startCamera() {
   try {
@@ -2011,17 +2037,15 @@ function decodeImageFile(file) {
         ctx.drawImage(img, 0, 0, w, h);
         URL.revokeObjectURL(img.src);
         const imageData = ctx.getImageData(0, 0, w, h);
-        const d = imageData.data;
-        const lum = new Uint8Array(w * h);
-        for (let i = 0; i < w * h; i++) {
-          lum[i] = (d[i * 4] * 77 + d[i * 4 + 1] * 150 + d[i * 4 + 2] * 29 + 128) >> 8;
-        }
-        const source = new ZXing.RGBLuminanceSource(w, h, lum);
+        const source = new ZXing.RGBLuminanceSource(imageData.data, w, h);
         const binarizer = new ZXing.HybridBinarizer(source);
         const bitmap = new ZXing.BinaryBitmap(binarizer);
         const reader = new ZXing.MultiFormatReader();
+        const hints = new Map();
+        hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.QR_CODE]);
+        hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
         try {
-          const result = reader.decode(bitmap);
+          const result = reader.decode(bitmap, hints);
           if (!resolved) { resolved = true; clearTimeout(timer); resolve(result.getText()); }
         } catch (e) {
           if (!resolved) { resolved = true; clearTimeout(timer); resolve(null); }
@@ -2039,7 +2063,7 @@ function decodeImageFile(file) {
 }
 
 function exportImages() {
-  const cameraFrames = imageFiles.filter(f => f && f.name.startsWith('qr_frame_'));
+  const cameraFrames = imageFiles.filter(isCameraFrame);
   if (cameraFrames.length === 0) {
     addScanLog('系统', '没有可导出的截图', 'end');
     return;
@@ -2050,7 +2074,7 @@ function exportImages() {
     a.href = url;
     a.download = f.name;
     a.click();
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   addScanLog('系统', `已导出 ${cameraFrames.length} 张截图`, 'success');
 }
@@ -2151,6 +2175,8 @@ function parseFileData(bytes) {
     receiverProgress.style.display = 'flex';
     rcvStatus.textContent = '等待元数据';
     logOncePer('provisional-data', 3000, '提示', '先收到数据分片，已暂存并等待元数据校准', 'meta');
+  } else if (file.totalChunks !== totalChunks || file.path !== path) {
+    return false;
   }
 
   const key = `${fileIdx}-${chunkIdx}`;
